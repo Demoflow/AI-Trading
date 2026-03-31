@@ -9,6 +9,7 @@ from loguru import logger
 
 
 class ExitManager:
+    _t1_alerts_fired = set()  # Track which symbols have fired T1
 
     def __init__(self):
         pass
@@ -113,7 +114,9 @@ class ExitManager:
         if pnl_pct >= profit_t1 and not pos.get("t1_hit"):
             pos["t1_hit"] = True
             if not pos.get("_t1_alerted"):
-                logger.info(f"  T1 HIT: {pos.get('underlying','?')} +{pnl_pct:.0%} - consider scaling out")
+                if sym not in ExitManager._t1_alerts_fired:
+                    logger.info(f"  T1 HIT: {pos.get('underlying','?')} +{pnl_pct:.0%} - consider scaling out")
+                    ExitManager._t1_alerts_fired.add(sym)
                 pos["_t1_alerted"] = True
 
         return False, "hold"

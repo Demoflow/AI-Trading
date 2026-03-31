@@ -52,10 +52,16 @@ class LETFExecutor:
             r2 = self.client.get_account(ah)
             d = r2.json()
             bal = d.get("securitiesAccount", {}).get("currentBalances", {})
+            avail = bal.get("availableFundsNonMarginableTrade", 0)
+            cash = bal.get("cashBalance", 0)
+            unsettled = cash - avail if cash > avail else 0
+            if unsettled > 0:
+                logger.info(f"Settlement: cash=${cash:,.2f} available=${avail:,.2f} unsettled=${unsettled:,.2f}")
             return {
-                "cash": bal.get("cashBalance", 0),
+                "cash": cash,
                 "equity": bal.get("liquidationValue", 0),
-                "available": bal.get("availableFundsNonMarginableTrade", 0),
+                "available": avail,
+                "unsettled": unsettled,
             }
         except Exception as e:
             logger.error(f"Balance error: {e}")
@@ -67,7 +73,10 @@ class LETFExecutor:
             bal = self.get_real_balance()
             if not bal:
                 return False, "cant_read_balance"
-            available = bal["available"] if bal["available"] > 0 else bal["cash"]  # Use cash if available is 0 (settlement)
+            available = bal["available"]
+            if available <= 0:
+                logger.warning(f"No settled funds available (available={available}, cash={bal['cash']})")
+                return False, "no_settled_funds"
             equity = bal["equity"]
         else:
             available = self.portfolio["cash"]

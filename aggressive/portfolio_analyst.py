@@ -749,11 +749,11 @@ class PortfolioAnalyst:
                 if opt_for_greeks:
                     greeks_result = pg.log_summary(opt_for_greeks)
                     # If high vega warning, increase sell pressure
-                    for w in greeks_result.get("warnings", []):
-                        if "HIGH_VEGA" in w:
+                    for _gw in greeks_result.get("warnings", []):
+                        if "HIGH_VEGA" in _gw:
                             logger.warning("Portfolio vega too high — consider reducing positions")
-                    if "HIGH_DELTA" in w:
-                        logger.warning("Portfolio delta too high — blocking new directional entries")
+                        if "HIGH_DELTA" in _gw:
+                            logger.warning("Portfolio delta too high — blocking new directional entries")
             except Exception as e:
                 logger.warning(f"Portfolio Greeks error: {e}")
 

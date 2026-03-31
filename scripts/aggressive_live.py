@@ -559,7 +559,21 @@ def run(paper=True):
                         "entry_date": "",
                         "max_hold_days": 21,
                     }
-                    should_exit, reason = exits.check_exit(pos_for_exit, current_total)
+                    # Check cooldown before exit
+                    if hasattr(run, "_exit_cooldowns") and sym in run._exit_cooldowns:
+                        import datetime as _dtc
+                        _age = (_dtc.datetime.now() - run._exit_cooldowns[sym]).total_seconds()
+                        if _age < 600:
+                            should_exit, reason = False, "cooldown"
+                        else:
+                            del run._exit_cooldowns[sym]
+                            should_exit, reason = exits.check_exit(pos_for_exit, current_total)
+                    else:
+                        should_exit, reason = exits.check_exit(pos_for_exit, current_total)
+                    if should_exit:
+                        if is_same_day_entry(sym):
+                            logger.warning(f"DAY TRADE BLOCKED (spread exit): {sym} entered today")
+                            should_exit = False
                     if should_exit:
                         result = executor.close_position_live(pos_for_exit)
                         logger.info(f"LIVE EXIT SPREAD: {sym} {reason} -> {result.get('status')}")

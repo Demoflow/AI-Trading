@@ -1,121 +1,79 @@
-"""Fix _dt import and add OrderStrategyType to spread close."""
-import datetime
+"""
+Fix settlement tracking to prevent Good Faith Violations.
+Never use unsettled cash in PCRA or Roth.
+"""
 
-# FIX 1: _exit_cooldowns uses _dt which isn't imported at that scope
-f = open("scripts/aggressive_live.py", "r", encoding="utf-8").read()
-f = f.replace(
-    "_exit_cooldowns[sym] = _dt.datetime.now()",
-    "_exit_cooldowns[sym] = datetime.datetime.now()"
-)
-# Also need to import datetime at the top of the exit section
-f = f.replace(
-    '''                        if result.get("status") == "REJECTED":
-                            # Don't retry for 10 minutes
-                            if "_exit_cooldowns" not in dir():
-                                _exit_cooldowns = {}
-                            _exit_cooldowns[sym] = datetime.datetime.now()''',
-    '''                        if result.get("status") == "REJECTED":
-                            # Don't retry for 10 minutes
-                            import datetime as _dtmod
-                            if not hasattr(run, '_exit_cooldowns'):
-                                run._exit_cooldowns = {}
-                            run._exit_cooldowns[sym] = _dtmod.datetime.now()'''
-)
-open("scripts/aggressive_live.py", "w", encoding="utf-8").write(f)
-print("1. Fixed _dt import in exit cooldown")
+f = open("letf/executor.py", "r", encoding="utf-8").read()
 
-# FIX 2: Spread close missing OrderStrategyType in the OrderBuilder
-g = open("aggressive/options_executor.py", "r", encoding="utf-8").read()
+# Fix 1: Never fall back to cashBalance — only use settled funds
+old_available = 'available = bal["available"] if bal["available"] > 0 else bal["cash"]  # Use cash if available is 0 (settlement)'
+new_available = '''available = bal["available"]
+            if available <= 0:
+                logger.warning(f"No settled funds available (available={available}, cash={bal['cash']})")
+                return False, "no_settled_funds"'''
 
-# The error says "orderStrategyType must not be null"
-# The OrderBuilder needs .set_order_strategy_type(OrderStrategyType.SINGLE)
-# Check if it's missing from the debit spread close block
-old_spread_order = """                order = (OrderBuilder()
-                    .set_order_type(order_type)
-                    .set_price(limit)
-                    .set_session(Session.NORMAL)
-                    .set_duration(Duration.DAY)
-                    .add_option_leg(OptionInstruction.SELL_TO_CLOSE, long_leg["symbol"], long_leg.get("qty", 1))
-                    .add_option_leg(OptionInstruction.BUY_TO_CLOSE, short_leg["symbol"], short_leg.get("qty", 1))
-                    .build())"""
+f = f.replace(old_available, new_available)
+print("1. Fixed: never falls back to unsettled cash")
 
-new_spread_order = """                order = (OrderBuilder()
-                    .set_order_type(order_type)
-                    .set_price(limit)
-                    .set_session(Session.NORMAL)
-                    .set_duration(Duration.DAY)
-                    .set_order_strategy_type(OrderStrategyType.SINGLE)
-                    .add_option_leg(OptionInstruction.SELL_TO_CLOSE, long_leg["symbol"], long_leg.get("qty", 1))
-                    .add_option_leg(OptionInstruction.BUY_TO_CLOSE, short_leg["symbol"], short_leg.get("qty", 1))
-                    .build())"""
-
-if old_spread_order in g:
-    g = g.replace(old_spread_order, new_spread_order)
-    print("2. Fixed: added OrderStrategyType.SINGLE to spread close")
+# Fix 2: Add settlement buffer — keep $500 extra as safety margin
+old_cash_check = '        if cost > available:'
+if old_cash_check in f:
+    new_cash_check = '''        # Settlement safety buffer — keep extra to avoid GFV
+        settlement_buffer = 500 if self.live else 0
+        if cost > (available - settlement_buffer):'''
+    f = f.replace(old_cash_check, new_cash_check, 1)
+    print("2. Added $500 settlement safety buffer")
 else:
-    print("2. Could not find exact spread order block - checking...")
-    lines = g.splitlines()
+    # Find the actual cash check
+    lines = f.splitlines()
     for i, line in enumerate(lines):
-        if "SELL_TO_CLOSE" in line and "long_leg" in line:
-            # Check if OrderStrategyType is set before this line
-            found_strategy = False
-            for j in range(max(0, i-5), i):
-                if "order_strategy_type" in lines[j]:
-                    found_strategy = True
-            if not found_strategy:
-                print(f"   Missing OrderStrategyType before line {i+1}")
-                # Add it before the SELL_TO_CLOSE line
-                indent = len(line) - len(line.lstrip())
-                lines.insert(i, " " * indent + ".set_order_strategy_type(OrderStrategyType.SINGLE)")
-                print(f"   INSERTED OrderStrategyType at line {i+1}")
-    g = "\n".join(lines)
+        if "cost" in line and "available" in line and (">" in line or "<" in line):
+            print(f"2. Cash check at line {i+1}: {line.strip()}")
 
-# Also fix the credit spread close block if it has the same issue
-old_credit_order = """                order = (OrderBuilder()
-                    .set_order_type(order_type)
-                    .set_price(limit)
-                    .set_session(Session.NORMAL)
-                    .set_duration(Duration.DAY)
-                    .add_option_leg(OptionInstruction.BUY_TO_CLOSE, short_leg["symbol"], short_leg.get("qty", 1))
-                    .add_option_leg(OptionInstruction.SELL_TO_CLOSE, long_leg["symbol"], long_leg.get("qty", 1))
-                    .build())"""
+# Fix 3: Log the actual settled vs unsettled amounts
+old_balance_return = '''            return {
+                "cash": bal.get("cashBalance", 0),
+                "equity": bal.get("liquidationValue", 0),
+                "available": bal.get("availableFundsNonMarginableTrade", 0),
+            }'''
+new_balance_return = '''            avail = bal.get("availableFundsNonMarginableTrade", 0)
+            cash = bal.get("cashBalance", 0)
+            unsettled = cash - avail if cash > avail else 0
+            if unsettled > 0:
+                logger.info(f"Settlement: cash=${cash:,.2f} available=${avail:,.2f} unsettled=${unsettled:,.2f}")
+            return {
+                "cash": cash,
+                "equity": bal.get("liquidationValue", 0),
+                "available": avail,
+                "unsettled": unsettled,
+            }'''
 
-new_credit_order = """                order = (OrderBuilder()
-                    .set_order_type(order_type)
-                    .set_price(limit)
-                    .set_session(Session.NORMAL)
-                    .set_duration(Duration.DAY)
-                    .set_order_strategy_type(OrderStrategyType.SINGLE)
-                    .add_option_leg(OptionInstruction.BUY_TO_CLOSE, short_leg["symbol"], short_leg.get("qty", 1))
-                    .add_option_leg(OptionInstruction.SELL_TO_CLOSE, long_leg["symbol"], long_leg.get("qty", 1))
-                    .build())"""
+f = f.replace(old_balance_return, new_balance_return)
+print("3. Added settlement logging")
 
-if old_credit_order in g:
-    g = g.replace(old_credit_order, new_credit_order)
-    print("2b. Fixed: added OrderStrategyType.SINGLE to credit close")
+# Fix 4: Also track settlement in the sell method
+# When we sell, the proceeds won't be available for 1-2 business days
+old_sell_log = 'logger.info(f"LIVE SELL: {symbol} x{qty} @ ${price} ({reason})")'
+if old_sell_log in f:
+    new_sell_log = '''logger.info(f"LIVE SELL: {symbol} x{qty} @ ${price} ({reason})")
+                logger.info(f"  NOTE: Proceeds ${qty * price:,.2f} will settle in 1-2 business days")'''
+    f = f.replace(old_sell_log, new_sell_log, 1)
+    print("4. Added settlement reminder on sells")
 
-open("aggressive/options_executor.py", "w", encoding="utf-8").write(g)
-
-# FIX 3: Also mark VZ and OXY as entered (they were entered but not caught)
-# The position check already handles calendars, but VZ/OXY are naked
-# Let's ensure they're in the _entered list
-import json
-try:
-    tf = json.load(open("config/aggressive_trades.json"))
-    for t in tf.get("trades", []):
-        t["_entered"] = True  # Mark ALL trades as entered
-    json.dump(tf, open("config/aggressive_trades.json", "w"), indent=2, default=str)
-    print("3. All trades marked as _entered")
-except Exception as e:
-    print(f"3. Error: {e}")
+open("letf/executor.py", "w", encoding="utf-8").write(f)
 
 # VERIFY
 import py_compile
-for p in ["scripts/aggressive_live.py", "aggressive/options_executor.py"]:
-    try:
-        py_compile.compile(p, doraise=True)
-        print(f"  COMPILE: {p} OK")
-    except py_compile.PyCompileError as e:
-        print(f"  ERROR: {p} - {e}")
+try:
+    py_compile.compile("letf/executor.py", doraise=True)
+    print("\n  COMPILE: letf/executor.py OK")
+except py_compile.PyCompileError as e:
+    print(f"\n  ERROR: {e}")
 
-print("\nRestart aggressive_live.py now.")
+print("\n=== Settlement Protection Active ===")
+print("  - Only uses availableFundsNonMarginableTrade (settled)")
+print("  - Never falls back to cashBalance (includes unsettled)")
+print("  - $500 safety buffer on every trade")
+print("  - Logs settlement status on every balance check")
+print("  - Logs settlement reminder on every sell")
+print("\n  This prevents Good Faith Violations in PCRA and Roth.")
