@@ -653,6 +653,23 @@ def run(paper=True):
         except Exception:
             pass
 
+        # ── PEAK EQUITY TRACKING ──
+        if not paper and cycle % 20 == 0:  # Every ~10 min
+            try:
+                _bal = client.get_account(client.get_account_numbers().json()[1]["hashValue"])
+                _eq = _bal.json().get("securitiesAccount", {}).get("currentBalances", {}).get("liquidationValue", 0)
+                if _eq > 0:
+                    _bs_path = "config/breaker_state.json"
+                    if os.path.exists(_bs_path):
+                        _bs = json.load(open(_bs_path))
+                        if _eq > _bs.get("peak", 0):
+                            _bs["peak"] = _eq
+                            _bs["last_updated"] = date.today().isoformat()
+                            json.dump(_bs, open(_bs_path, "w"), indent=2)
+                            logger.info(f"NEW PEAK EQUITY: ${_eq:,.2f}")
+            except Exception:
+                pass
+
         # ── STATUS ──
         if cycle % 10 == 0:
             s = executor.get_live_summary() if not paper else executor.get_summary()

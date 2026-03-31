@@ -188,6 +188,29 @@ class AggressiveScanner:
                     skipped["low_score"] += 1
                     continue
 
+                # REGIME GATE: In downtrends with high VIX, filter aggressively
+                regime_gate = True
+                try:
+                    regime = self.analyzer.regime if hasattr(self.analyzer, 'regime') else ""
+                    if "DOWN" in str(regime).upper() and vix > 25:
+                        if flow["direction"] == "CALL":
+                            # Require price above 20-day SMA for calls in downtrend
+                            df = price_cache.get(sym)
+                            if df is not None and len(df) >= 20:
+                                sma20 = df["close"].tail(20).mean()
+                                current = df["close"].iloc[-1]
+                                rsi = analysis.get("sub_scores", {}).get("rsi", 50)
+                                if current < sma20 and rsi < 50:
+                                    regime_gate = False
+                                    skipped["filter"] += 1
+                        elif flow["direction"] == "PUT":
+                            # Boost PUT conviction in downtrends
+                            analysis["composite"] = min(100, analysis["composite"] + 10)
+                except Exception:
+                    pass
+                if not regime_gate:
+                    continue
+
                 # Priority 6: Multi-day flow persistence check
                 try:
                     persist = self.flow_persist.get_persistence(sym, flow["direction"])

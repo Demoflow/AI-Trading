@@ -149,7 +149,7 @@ class DeepAnalyzer:
 
         if score >= 80:
             conv = "HIGH"
-            sp = 0.25 * vm * iv_mod
+            sp = 0.08 * vm * iv_mod
         elif score >= 70:
             conv = "MEDIUM"
             sp = 0.06 * vm * iv_mod

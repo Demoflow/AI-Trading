@@ -2,7 +2,7 @@
   "halted": false,
   "halt_reason": null,
   "halt_until": null,
-  "peak": 8000,
+  "peak": 8484.85,
   "daily_pnl": [
     {
       "date": "2026-03-07",
@@ -10,5 +10,6 @@
       "eq": 8000
     }
   ],
-  "consec_losses": 0
+  "consec_losses": 0,
+  "last_updated": "2026-03-30"
 }
