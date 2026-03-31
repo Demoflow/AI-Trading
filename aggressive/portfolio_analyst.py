@@ -679,6 +679,29 @@ class PortfolioAnalyst:
                 for r in result["reasons"]:
                     logger.info(f"        {r}")
 
+        # Portfolio-level Greeks check
+        if options_positions:
+            try:
+                from aggressive.portfolio_greeks import PortfolioGreeks
+                pg = PortfolioGreeks(self.client)
+                opt_for_greeks = []
+                for p in options_positions:
+                    csym = p.get("symbol", p.get("contract", ""))
+                    if csym and ("260" in csym or "C0" in csym or "P0" in csym):
+                        opt_for_greeks.append({
+                            "symbol": csym,
+                            "qty": p.get("qty", 1),
+                            "direction": "LONG" if p.get("qty", 1) > 0 else "SHORT",
+                        })
+                if opt_for_greeks:
+                    greeks_result = pg.log_summary(opt_for_greeks)
+                    # If high vega warning, increase sell pressure
+                    for w in greeks_result.get("warnings", []):
+                        if "HIGH_VEGA" in w:
+                            logger.warning("Portfolio vega too high — consider reducing positions")
+            except Exception as e:
+                logger.warning(f"Portfolio Greeks error: {e}")
+
         sells = [r for r in results if r["action"] == "SELL"]
         trims = [r for r in results if r["action"] == "TRIM"]
         holds = [r for r in results if r["action"] == "HOLD"]

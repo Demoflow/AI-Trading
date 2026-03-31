@@ -152,6 +152,7 @@ def run(paper=True):
     from aggressive.options_executor import OptionsExecutor
     from aggressive.smart_entry import SmartEntry
     from aggressive.exit_manager import ExitManager
+    from aggressive.bracket_stops import BracketStopManager
     from aggressive.portfolio_analyst import PortfolioAnalyst
     from aggressive.greeks_exit import GreeksExitMonitor
     from aggressive.account_manager import AccountManager
@@ -172,6 +173,7 @@ def run(paper=True):
     executor = OptionsExecutor(client, ah, paper_mode=paper)
     smart = SmartEntry(client)
     exits = ExitManager()
+    bracket_mgr = BracketStopManager(client)
 
     def is_same_day_entry(symbol, option_symbol=""):
         """Check if a position was entered today (day trade protection)."""
@@ -325,6 +327,21 @@ def run(paper=True):
                     if result.get("status") in ("SUBMITTED", "FILLED"):
                         executed.add(sym)
                         logger.info(f"ENTERED: {sym}")
+                    # Place GTC stop at broker level
+                    try:
+                        if not paper:
+                            s = trade.get("strategy", {})
+                            contracts = s.get("contracts", [])
+                            if contracts:
+                                entry_mid = contracts[0].get("mid", 0)
+                                csym = contracts[0].get("symbol", "")
+                                qty = contracts[0].get("qty", 1)
+                                stype = s.get("type", "NAKED_LONG")
+                                if entry_mid > 0 and csym:
+                                    ah_stop = client.get_account_numbers().json()[1]["hashValue"]
+                                    bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
+                    except Exception as e:
+                        logger.warning(f"Bracket stop error: {e}")
                     else:
                         logger.warning(f"FAILED {sym}: {result}")
                         trade["_rejected"] = True
@@ -621,6 +638,20 @@ def run(paper=True):
                                         break
             except Exception as e:
                 logger.warning(f"Portfolio analyst error: {e}")
+
+        # ── ORDER FILL CHECK ──
+        try:
+            if not paper and hasattr(executor, 'fill_tracker') and executor.fill_tracker:
+                ah_fill = executor._get_account_hash()
+                fills = executor.fill_tracker.check_fills(ah_fill)
+                if fills:
+                    for fill in fills:
+                        logger.info(f"CONFIRMED FILL: {fill['symbol']} {fill['status']}")
+                pending = executor.fill_tracker.get_pending_count()
+                if pending > 0 and cycle % 5 == 0:
+                    logger.info(f"Pending orders: {pending}")
+        except Exception:
+            pass
 
         # ── STATUS ──
         if cycle % 10 == 0:
