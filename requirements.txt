@@ -1,0 +1,12 @@
+yfinance
+pandas
+numpy
+sqlalchemy
+psycopg2-binary
+alembic
+python-dotenv
+loguru
+schedule
+requests
+ta
+pytest

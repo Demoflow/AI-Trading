@@ -1,0 +1,14 @@
+{
+  "halted": false,
+  "halt_reason": null,
+  "halt_until": null,
+  "peak": 8000,
+  "daily_pnl": [
+    {
+      "date": "2026-03-07",
+      "pnl": -0.01,
+      "eq": 8000
+    }
+  ],
+  "consec_losses": 0
+}

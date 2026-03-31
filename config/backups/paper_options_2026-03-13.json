@@ -1,0 +1,44 @@
+{
+  "cash": 5859.0,
+  "positions": [
+    {
+      "contract": "COIN  260327C00205000",
+      "underlying": "COIN",
+      "direction": "CALL",
+      "strike": 205.0,
+      "dte": 16,
+      "qty": 1,
+      "entry_price": 6.85,
+      "entry_cost": 685.0,
+      "entry_date": "2026-03-12",
+      "status": "OPEN",
+      "t1_hit": false
+    },
+    {
+      "contract": "HOOD  260417C00080000",
+      "underlying": "HOOD",
+      "direction": "CALL",
+      "strike": 80.0,
+      "dte": 37,
+      "qty": 1,
+      "entry_price": 4.78,
+      "entry_cost": 478.0,
+      "entry_date": "2026-03-12",
+      "status": "OPEN",
+      "t1_hit": false
+    },
+    {
+      "contract": "MRVL  260417P00095000",
+      "underlying": "MRVL",
+      "direction": "PUT",
+      "strike": 95.0,
+      "dte": 37,
+      "qty": 1,
+      "entry_price": 9.78,
+      "entry_cost": 978.0,
+      "entry_date": "2026-03-12",
+      "status": "OPEN",
+      "t1_hit": false
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "account_hash": "14640093554734CFB83AAD3D673A3F10E7DCA97EBA8A9EA596A5CC3EFDEDE6C9",
+  "account_number": "16167026",
+  "equity": 47219.69,
+  "cash": 47219.69,
+  "max_position_pct": 0.1,
+  "max_positions": 7,
+  "max_portfolio_heat": 0.8,
+  "cash_reserve_pct": 0.2,
+  "daily_loss_halt_pct": 0.03,
+  "min_conviction": 90,
+  "max_hold_days": 10,
+  "trailing_stop_3x": 0.03,
+  "trailing_stop_2x": 0.02,
+  "profit_target_3x": 0.12,
+  "profit_target_2x": 0.08,
+  "peak_equity": 47892.83,
+  "weekly_drawdown_halt_pct": 0.1
+}

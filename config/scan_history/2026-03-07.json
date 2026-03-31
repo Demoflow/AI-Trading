@@ -1,0 +1,149 @@
+{
+  "generated_at": "2026-03-08T04:49:44.160034",
+  "account_equity": 8000.0,
+  "options": [
+    {
+      "symbol": "CSCO",
+      "direction": "CALL",
+      "score": 76.1,
+      "max_cost": 400.0,
+      "entry_price": 78.64,
+      "stop_loss": 77.02,
+      "target_1": 81.07,
+      "target_2": 82.69,
+      "sub_scores": {
+        "technical": 65.0,
+        "options_flow": 0,
+        "fundamental": 62.5,
+        "market_context": 42.2,
+        "risk_reward": 82.5
+      }
+    },
+    {
+      "symbol": "LOW",
+      "direction": "CALL",
+      "score": 75.1,
+      "max_cost": 400.0,
+      "entry_price": 251.89,
+      "stop_loss": 242.52,
+      "target_1": 265.94,
+      "target_2": 275.31,
+      "sub_scores": {
+        "technical": 67.8,
+        "options_flow": 0,
+        "fundamental": 63.2,
+        "market_context": 34.2,
+        "risk_reward": 80.0
+      }
+    },
+    {
+      "symbol": "AMAT",
+      "direction": "CALL",
+      "score": 75.1,
+      "max_cost": 400.0,
+      "entry_price": 324.74,
+      "stop_loss": 314.15,
+      "target_1": 340.62,
+      "target_2": 351.21,
+      "sub_scores": {
+        "technical": 67.0,
+        "options_flow": 0,
+        "fundamental": 61.5,
+        "market_context": 38.2,
+        "risk_reward": 79.5
+      }
+    }
+  ],
+  "stocks": [
+    {
+      "symbol": "CSCO",
+      "score": 76.1,
+      "shares": 8,
+      "position_cost": 629.12,
+      "entry_price": 78.64,
+      "stop_loss": 77.02,
+      "target_1": 81.07,
+      "target_2": 82.69,
+      "target_3": 85.12,
+      "atr": 2.09,
+      "sector": "Technology",
+      "sub_scores": {
+        "technical": 65.0,
+        "options_flow": 0,
+        "fundamental": 62.5,
+        "market_context": 42.2,
+        "risk_reward": 82.5
+      }
+    },
+    {
+      "symbol": "LOW",
+      "score": 75.1,
+      "shares": 2,
+      "position_cost": 503.78,
+      "entry_price": 251.89,
+      "stop_loss": 242.52,
+      "target_1": 265.94,
+      "target_2": 275.31,
+      "target_3": 289.37,
+      "atr": 6.91,
+      "sector": "Consumer Discretionary",
+      "sub_scores": {
+        "technical": 67.8,
+        "options_flow": 0,
+        "fundamental": 63.2,
+        "market_context": 34.2,
+        "risk_reward": 80.0
+      }
+    },
+    {
+      "symbol": "AMAT",
+      "score": 75.1,
+      "shares": 1,
+      "position_cost": 324.74,
+      "entry_price": 324.74,
+      "stop_loss": 314.15,
+      "target_1": 340.62,
+      "target_2": 351.21,
+      "target_3": 367.1,
+      "atr": 18.06,
+      "sector": "Technology",
+      "sub_scores": {
+        "technical": 67.0,
+        "options_flow": 0,
+        "fundamental": 61.5,
+        "market_context": 38.2,
+        "risk_reward": 79.5
+      }
+    },
+    {
+      "symbol": "WMT",
+      "score": 73.0,
+      "shares": 5,
+      "position_cost": 619.0,
+      "entry_price": 123.8,
+      "stop_loss": 119.56,
+      "target_1": 130.16,
+      "target_2": 134.4,
+      "target_3": 140.76,
+      "atr": 3.39,
+      "sector": "Consumer Staples",
+      "sub_scores": {
+        "technical": 65.5,
+        "options_flow": 0,
+        "fundamental": 61.8,
+        "market_context": 36.2,
+        "risk_reward": 75.0
+      }
+    }
+  ],
+  "leveraged_etfs": [],
+  "summary": {
+    "total_candidates_scanned": 50,
+    "options_picks": 3,
+    "stock_picks": 4,
+    "etf_picks": 0,
+    "total_planned_deployment": 3276.64,
+    "deployment_pct": 41.0,
+    "cash_remaining_pct": 59.0
+  }
+}

@@ -1,0 +1,476 @@
+{
+  "date": "2026-03-13",
+  "equity": 8000.0,
+  "mode": "ELITE_v5.1",
+  "vix": 27.19,
+  "regime": "TRENDING_DOWN",
+  "trades": [
+    {
+      "symbol": "VLO",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100.0,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 90,
+        "direction": "PUT",
+        "contracts": [
+          {
+            "symbol": "VLO   260410P00230000",
+            "desc": "VLO 04/10/2026 230.00 P",
+            "strike": 230.0,
+            "dte": 28,
+            "delta": 0.466,
+            "iv": 44.8,
+            "bid": 10.45,
+            "ask": 11.65,
+            "mid": 11.05,
+            "spread_pct": 0.1086,
+            "qty": 1,
+            "total_cost": 1105.0,
+            "oi": 61,
+            "volume": 7,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 11.05,
+        "max_loss": 11.05,
+        "max_profit": "unlimited",
+        "breakeven": 218.95,
+        "qty": 1,
+        "total_cost": 1105.0,
+        "description": "Long 230.0 PUT"
+      },
+      "analysis": {
+        "symbol": "VLO",
+        "price": 230.59,
+        "composite": 100.0,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.1466,
+        "sub_scores": {
+          "flow": 100.0
+        },
+        "levels": {
+          "support": 219.06,
+          "resistance": 253.65,
+          "high_52w": 0,
+          "atr": 4.61,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 22.9,
+      "flow_summary": {
+        "strength": 7,
+        "cp_ratio": 0.34,
+        "total_premium": 3048640.0,
+        "opening_pct": 73.4
+      },
+      "entry_price": 230.59,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "SCHW",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100.0,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 80,
+        "direction": "PUT",
+        "contracts": [
+          {
+            "symbol": "SCHW  260417P00095000",
+            "desc": "SCHW 04/17/2026 95.00 P",
+            "strike": 95.0,
+            "dte": 35,
+            "delta": 0.552,
+            "iv": 34.6,
+            "bid": 4.6,
+            "ask": 4.85,
+            "mid": 4.72,
+            "spread_pct": 0.0529,
+            "qty": 2,
+            "total_cost": 945.0,
+            "oi": 437,
+            "volume": 17,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 4.72,
+        "max_loss": 4.72,
+        "max_profit": "unlimited",
+        "breakeven": 90.28,
+        "qty": 2,
+        "total_cost": 945.0,
+        "description": "Long 95.0 PUT"
+      },
+      "analysis": {
+        "symbol": "SCHW",
+        "price": 93.06,
+        "composite": 100.0,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100.0
+        },
+        "levels": {
+          "support": 88.41,
+          "resistance": 102.37,
+          "high_52w": 0,
+          "atr": 1.86,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 39.0,
+      "flow_summary": {
+        "strength": 6,
+        "cp_ratio": 0.35,
+        "total_premium": 527518.0,
+        "opening_pct": 26.8
+      },
+      "entry_price": 93.06,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "ABNB",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100.0,
+      "strategy": {
+        "type": "DEBIT_SPREAD",
+        "score": 95,
+        "direction": "PUT",
+        "contracts": [
+          {
+            "symbol": "ABNB  260417P00125000",
+            "desc": "ABNB 04/17/2026 125.00 P",
+            "strike": 125.0,
+            "delta": 0.439,
+            "bid": 5.15,
+            "ask": 5.55,
+            "mid": 5.35,
+            "iv": 38.936,
+            "oi": 1581,
+            "dte": 35,
+            "leg": "LONG",
+            "qty": 2
+          },
+          {
+            "symbol": "ABNB  260417P00115000",
+            "desc": "ABNB 04/17/2026 115.00 P",
+            "strike": 115.0,
+            "delta": 0.221,
+            "bid": 2.11,
+            "ask": 2.52,
+            "mid": 2.31,
+            "iv": 43.645,
+            "oi": 1359,
+            "dte": 35,
+            "leg": "SHORT",
+            "qty": 2
+          }
+        ],
+        "net_debit": 3.44,
+        "max_loss": 3.44,
+        "max_profit": 6.56,
+        "breakeven": 121.56,
+        "qty": 2,
+        "total_cost": 688.0,
+        "spread_width": 10.0,
+        "description": "Bear Put 115.0/125.0"
+      },
+      "analysis": {
+        "symbol": "ABNB",
+        "price": 126.3,
+        "composite": 100.0,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100.0
+        },
+        "levels": {
+          "support": 119.98,
+          "resistance": 138.93,
+          "high_52w": 0,
+          "atr": 2.53,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 49.6,
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 0.27,
+        "total_premium": 331291.0,
+        "opening_pct": 36.9
+      },
+      "entry_price": 126.3,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "PLTR",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85.0,
+      "strategy": {
+        "type": "DEBIT_SPREAD",
+        "score": 100,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "PLTR  260417C00155000",
+            "desc": "PLTR 04/17/2026 155.00 C",
+            "strike": 155.0,
+            "delta": 0.467,
+            "bid": 7.8,
+            "ask": 7.9,
+            "mid": 7.85,
+            "iv": 51.521,
+            "oi": 4202,
+            "dte": 35,
+            "leg": "LONG",
+            "qty": 1
+          },
+          {
+            "symbol": "PLTR  260417C00170000",
+            "desc": "PLTR 04/17/2026 170.00 C",
+            "strike": 170.0,
+            "delta": 0.238,
+            "bid": 2.91,
+            "ask": 2.98,
+            "mid": 2.95,
+            "iv": 48.562,
+            "oi": 7373,
+            "dte": 35,
+            "leg": "SHORT",
+            "qty": 1
+          }
+        ],
+        "net_debit": 4.99,
+        "max_loss": 4.99,
+        "max_profit": 10.01,
+        "breakeven": 159.99,
+        "qty": 1,
+        "total_cost": 499.0,
+        "spread_width": 15.0,
+        "description": "Bull Call 155.0/170.0"
+      },
+      "analysis": {
+        "symbol": "PLTR",
+        "price": 150.95,
+        "composite": 85.0,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1084,
+        "sub_scores": {
+          "flow": 85.0
+        },
+        "levels": {
+          "support": 143.4,
+          "resistance": 166.04,
+          "high_52w": 0,
+          "atr": 3.02,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 61.0,
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 2.21,
+        "total_premium": 19373294.0,
+        "opening_pct": 37.0
+      },
+      "entry_price": 150.95,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "ANET",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85.0,
+      "strategy": {
+        "type": "DEBIT_SPREAD",
+        "score": 100,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "ANET  260417C00140000",
+            "desc": "ANET 04/17/2026 140.00 C",
+            "strike": 140.0,
+            "delta": 0.421,
+            "bid": 6.0,
+            "ask": 6.45,
+            "mid": 6.22,
+            "iv": 53.966,
+            "oi": 1520,
+            "dte": 35,
+            "leg": "LONG",
+            "qty": 2
+          },
+          {
+            "symbol": "ANET  260417C00155000",
+            "desc": "ANET 04/17/2026 155.00 C",
+            "strike": 155.0,
+            "delta": 0.193,
+            "bid": 1.98,
+            "ask": 2.18,
+            "mid": 2.08,
+            "iv": 50.891,
+            "oi": 1038,
+            "dte": 35,
+            "leg": "SHORT",
+            "qty": 2
+          }
+        ],
+        "net_debit": 4.47,
+        "max_loss": 4.47,
+        "max_profit": 10.53,
+        "breakeven": 144.47,
+        "qty": 2,
+        "total_cost": 894.0,
+        "spread_width": 15.0,
+        "description": "Bull Call 140.0/155.0"
+      },
+      "analysis": {
+        "symbol": "ANET",
+        "price": 133.57,
+        "composite": 85.0,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 85.0
+        },
+        "levels": {
+          "support": 126.89,
+          "resistance": 146.93,
+          "high_52w": 0,
+          "atr": 2.67,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 54.7,
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 2.89,
+        "total_premium": 453009.0,
+        "opening_pct": 45.4
+      },
+      "entry_price": 133.57,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "MRNA",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85.0,
+      "strategy": {
+        "type": "DEBIT_SPREAD",
+        "score": 100,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "MRNA  260417C00055000",
+            "desc": "MRNA 04/17/2026 55.00 C",
+            "strike": 55.0,
+            "delta": 0.47,
+            "bid": 3.75,
+            "ask": 4.2,
+            "mid": 3.98,
+            "iv": 77.453,
+            "oi": 8569,
+            "dte": 35,
+            "leg": "LONG",
+            "qty": 4
+          },
+          {
+            "symbol": "MRNA  260417C00060000",
+            "desc": "MRNA 04/17/2026 60.00 C",
+            "strike": 60.0,
+            "delta": 0.328,
+            "bid": 2.3,
+            "ask": 2.45,
+            "mid": 2.38,
+            "iv": 76.647,
+            "oi": 8821,
+            "dte": 35,
+            "leg": "SHORT",
+            "qty": 4
+          }
+        ],
+        "net_debit": 1.9,
+        "max_loss": 1.9,
+        "max_profit": 3.1,
+        "breakeven": 56.9,
+        "qty": 4,
+        "total_cost": 760.0,
+        "spread_width": 5.0,
+        "description": "Bull Call 55.0/60.0"
+      },
+      "analysis": {
+        "symbol": "MRNA",
+        "price": 52.56,
+        "composite": 85.0,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1084,
+        "sub_scores": {
+          "flow": 85.0
+        },
+        "levels": {
+          "support": 49.93,
+          "resistance": 57.82,
+          "high_52w": 0,
+          "atr": 1.05,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 27.19
+      },
+      "iv_rank": 65.2,
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 2.42,
+        "total_premium": 2241730.0,
+        "opening_pct": 58.7
+      },
+      "entry_price": 52.56,
+      "max_hold_days": 30
+    }
+  ],
+  "total_cost": 4891.0,
+  "deployment_pct": 61.1,
+  "skipped": {
+    "existing": 7,
+    "corr": 54,
+    "filter": 50,
+    "low_score": 21,
+    "no_strategy": 0
+  },
+  "universe_size": 156,
+  "flow_signals": 140
+}

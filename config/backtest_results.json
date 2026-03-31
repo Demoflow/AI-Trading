@@ -1,0 +1,1622 @@
+{
+  "period_days": 365,
+  "starting_equity": 8000.0,
+  "final_equity": 5865.81,
+  "total_pnl": -2134.19,
+  "total_return_pct": -26.68,
+  "total_trades": 25,
+  "trades": [
+    {
+      "symbol": "CRM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 276.0299987792969,
+      "exit_price": 258.07,
+      "entry_date": "2025-05-28",
+      "exit_date": "2025-07-11",
+      "hold_days": 30,
+      "cost": 1380.15,
+      "pnl": -314.3,
+      "return_pct": -22.8,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "ISRG",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 526.1500244140625,
+      "exit_price": 501.95,
+      "entry_date": "2025-06-09",
+      "exit_date": "2025-07-23",
+      "hold_days": 30,
+      "cost": 2630.75,
+      "pnl": -423.5,
+      "return_pct": -16.1,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "INTC",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 22.079999923706055,
+      "exit_price": 22.63,
+      "entry_date": "2025-06-10",
+      "exit_date": "2025-07-24",
+      "hold_days": 30,
+      "cost": 441.6,
+      "pnl": 38.5,
+      "return_pct": 8.7,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "ADBE",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 391.67999267578125,
+      "exit_price": 370.7,
+      "entry_date": "2025-06-13",
+      "exit_date": "2025-07-29",
+      "hold_days": 30,
+      "cost": 1958.4,
+      "pnl": -367.15,
+      "return_pct": -18.7,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "MRK",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 79.29000091552734,
+      "exit_price": 79.29,
+      "entry_date": "2025-06-18",
+      "exit_date": "2025-08-01",
+      "hold_days": 30,
+      "cost": 396.45,
+      "pnl": 0.0,
+      "return_pct": 0.0,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "UNP",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 227.49000549316406,
+      "exit_price": 222.35,
+      "entry_date": "2025-07-17",
+      "exit_date": "2025-08-28",
+      "hold_days": 30,
+      "cost": 1137.45,
+      "pnl": -89.95,
+      "return_pct": -7.9,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "META",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 695.2100219726562,
+      "exit_price": 750.9,
+      "entry_date": "2025-07-30",
+      "exit_date": "2025-09-11",
+      "hold_days": 30,
+      "cost": 3476.05,
+      "pnl": 974.58,
+      "return_pct": 28.0,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "UNH",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 304.010009765625,
+      "exit_price": 345.18,
+      "entry_date": "2025-08-15",
+      "exit_date": "2025-09-29",
+      "hold_days": 30,
+      "cost": 1520.05,
+      "pnl": -19.78,
+      "return_pct": 47.4,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "WMT",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "entry_price": 97.95999908447266,
+      "exit_price": 102.07,
+      "entry_date": "2025-08-21",
+      "exit_date": "2025-10-03",
+      "hold_days": 30,
+      "cost": 489.8,
+      "pnl": 71.93,
+      "return_pct": 14.7,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "RTX",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 154.22000122070312,
+      "exit_price": 160.71,
+      "entry_date": "2025-09-08",
+      "exit_date": "2025-10-20",
+      "hold_days": 30,
+      "cost": 771.1,
+      "pnl": 113.58,
+      "return_pct": 14.7,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "GILD",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 115.87999725341797,
+      "exit_price": 123.11,
+      "entry_date": "2025-09-08",
+      "exit_date": "2025-10-20",
+      "hold_days": 30,
+      "cost": 579.4,
+      "pnl": 126.53,
+      "return_pct": 21.8,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "LLY",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 751.989990234375,
+      "exit_price": 862.86,
+      "entry_date": "2025-09-19",
+      "exit_date": "2025-10-31",
+      "hold_days": 30,
+      "cost": 3759.95,
+      "pnl": 30.12,
+      "return_pct": 51.6,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "UNP",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 225.4499969482422,
+      "exit_price": 226.22,
+      "entry_date": "2025-10-10",
+      "exit_date": "2025-11-21",
+      "hold_days": 30,
+      "cost": 1127.25,
+      "pnl": 13.48,
+      "return_pct": 1.2,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "JPM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 302.0799865722656,
+      "exit_price": 303.0,
+      "entry_date": "2025-10-14",
+      "exit_date": "2025-11-25",
+      "hold_days": 30,
+      "cost": 1510.4,
+      "pnl": 16.1,
+      "return_pct": 1.1,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "XOM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 114.36000061035156,
+      "exit_price": 117.76,
+      "entry_date": "2025-10-31",
+      "exit_date": "2025-12-15",
+      "hold_days": 30,
+      "cost": 571.8,
+      "pnl": 59.5,
+      "return_pct": 10.4,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "COST",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 940.739990234375,
+      "exit_price": 862.65,
+      "entry_date": "2025-11-04",
+      "exit_date": "2025-12-17",
+      "hold_days": 30,
+      "cost": 4703.7,
+      "pnl": -1366.57,
+      "return_pct": -29.1,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "ADBE",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 346.260009765625,
+      "exit_price": 309.93,
+      "entry_date": "2025-12-05",
+      "exit_date": "2026-01-13",
+      "hold_days": 25,
+      "cost": 1731.3,
+      "pnl": -635.78,
+      "return_pct": -36.7,
+      "exit_reason": "STOP"
+    },
+    {
+      "symbol": "ABBV",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 226.82000732421875,
+      "exit_price": 217.11,
+      "entry_date": "2025-12-19",
+      "exit_date": "2026-02-04",
+      "hold_days": 30,
+      "cost": 1134.1,
+      "pnl": -169.93,
+      "return_pct": -15.0,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "GILD",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 124.29000091552734,
+      "exit_price": 146.23,
+      "entry_date": "2025-12-19",
+      "exit_date": "2026-02-04",
+      "hold_days": 30,
+      "cost": 621.45,
+      "pnl": 36.61,
+      "return_pct": 61.8,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "TXN",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 176.2899932861328,
+      "exit_price": 222.92,
+      "entry_date": "2025-12-19",
+      "exit_date": "2026-02-04",
+      "hold_days": 30,
+      "cost": 881.45,
+      "pnl": 187.65,
+      "return_pct": 92.6,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "AMZN",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 242.60000610351562,
+      "exit_price": 210.32,
+      "entry_date": "2026-01-13",
+      "exit_date": "2026-02-06",
+      "hold_days": 17,
+      "cost": 1213.0,
+      "pnl": -564.9,
+      "return_pct": -46.6,
+      "exit_reason": "STOP"
+    },
+    {
+      "symbol": "NVDA",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 190.52999877929688,
+      "exit_price": 188.54,
+      "entry_date": "2025-12-26",
+      "exit_date": "2026-02-10",
+      "hold_days": 30,
+      "cost": 952.65,
+      "pnl": -34.83,
+      "return_pct": -3.7,
+      "exit_reason": "TIME"
+    },
+    {
+      "symbol": "CAT",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 691.8200073242188,
+      "exit_price": 716.68,
+      "entry_date": "2026-02-04",
+      "exit_date": "END",
+      "hold_days": 0,
+      "cost": 3459.1,
+      "pnl": 435.05,
+      "return_pct": 12.6,
+      "exit_reason": "END"
+    },
+    {
+      "symbol": "AAPL",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 273.67999267578125,
+      "exit_price": 260.83,
+      "entry_date": "2026-02-10",
+      "exit_date": "END",
+      "hold_days": 0,
+      "cost": 1368.4,
+      "pnl": -224.88,
+      "return_pct": -16.4,
+      "exit_reason": "END"
+    },
+    {
+      "symbol": "CSCO",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "entry_price": 79.19999694824219,
+      "exit_price": 77.7,
+      "entry_date": "2026-02-20",
+      "exit_date": "END",
+      "hold_days": 0,
+      "cost": 396.0,
+      "pnl": -26.25,
+      "return_pct": -6.6,
+      "exit_reason": "END"
+    }
+  ],
+  "signals": [
+    {
+      "date": "2025-05-28",
+      "symbol": "CRM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 69.0,
+      "price": 276.03,
+      "rsi": 49.1,
+      "rr": 3.37
+    },
+    {
+      "date": "2025-06-09",
+      "symbol": "ISRG",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 71.2,
+      "price": 526.15,
+      "rsi": 40.3,
+      "rr": 10.61
+    },
+    {
+      "date": "2025-06-10",
+      "symbol": "INTC",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.0,
+      "price": 22.08,
+      "rsi": 62.0,
+      "rr": 2.86
+    },
+    {
+      "date": "2025-06-13",
+      "symbol": "ADBE",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 71.2,
+      "price": 391.68,
+      "rsi": 39.3,
+      "rr": 5.04
+    },
+    {
+      "date": "2025-06-18",
+      "symbol": "MRK",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 66.5,
+      "price": 79.29,
+      "rsi": 50.2,
+      "rr": 42.58
+    },
+    {
+      "date": "2025-07-17",
+      "symbol": "UNP",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.2,
+      "price": 227.49,
+      "rsi": 44.1,
+      "rr": 15.54
+    },
+    {
+      "date": "2025-07-30",
+      "symbol": "META",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 66.8,
+      "price": 695.21,
+      "rsi": 44.6,
+      "rr": 47.12
+    },
+    {
+      "date": "2025-08-15",
+      "symbol": "UNH",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 67.0,
+      "price": 304.01,
+      "rsi": 64.2,
+      "rr": 1.47
+    },
+    {
+      "date": "2025-08-21",
+      "symbol": "WMT",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "score": 75.2,
+      "price": 97.96,
+      "rsi": 43.8,
+      "rr": 96.3
+    },
+    {
+      "date": "2025-09-08",
+      "symbol": "RTX",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.2,
+      "price": 154.22,
+      "rsi": 43.9,
+      "rr": 10.32
+    },
+    {
+      "date": "2025-09-08",
+      "symbol": "GILD",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.0,
+      "price": 115.88,
+      "rsi": 54.7,
+      "rr": 2.66
+    },
+    {
+      "date": "2025-09-19",
+      "symbol": "LLY",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 68.5,
+      "price": 751.99,
+      "rsi": 54.5,
+      "rr": 5.6
+    },
+    {
+      "date": "2025-10-10",
+      "symbol": "UNP",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.8,
+      "price": 225.45,
+      "rsi": 44.4,
+      "rr": 12.22
+    },
+    {
+      "date": "2025-10-14",
+      "symbol": "JPM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.2,
+      "price": 302.08,
+      "rsi": 44.2,
+      "rr": 119.07
+    },
+    {
+      "date": "2025-10-31",
+      "symbol": "XOM",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.5,
+      "price": 114.36,
+      "rsi": 52.3,
+      "rr": 3.42
+    },
+    {
+      "date": "2025-11-04",
+      "symbol": "COST",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.0,
+      "price": 940.74,
+      "rsi": 53.7,
+      "rr": 38.32
+    },
+    {
+      "date": "2025-12-05",
+      "symbol": "ADBE",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 65.0,
+      "price": 346.26,
+      "rsi": 63.4,
+      "rr": 2.76
+    },
+    {
+      "date": "2025-12-19",
+      "symbol": "ABBV",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 69.0,
+      "price": 226.82,
+      "rsi": 51.3,
+      "rr": 125.62
+    },
+    {
+      "date": "2025-12-19",
+      "symbol": "GILD",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 68.5,
+      "price": 124.29,
+      "rsi": 55.1,
+      "rr": 2.06
+    },
+    {
+      "date": "2025-12-19",
+      "symbol": "TXN",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 68.0,
+      "price": 176.29,
+      "rsi": 55.1,
+      "rr": 1.57
+    },
+    {
+      "date": "2025-12-26",
+      "symbol": "NVDA",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.2,
+      "price": 190.53,
+      "rsi": 58.7,
+      "rr": 4.85
+    },
+    {
+      "date": "2026-01-13",
+      "symbol": "AMZN",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.2,
+      "price": 242.6,
+      "rsi": 60.7,
+      "rr": 1.87
+    },
+    {
+      "date": "2026-02-04",
+      "symbol": "CAT",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 68.2,
+      "price": 691.82,
+      "rsi": 67.5,
+      "rr": 0.38
+    },
+    {
+      "date": "2026-02-10",
+      "symbol": "AAPL",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 64.8,
+      "price": 273.68,
+      "rsi": 61.2,
+      "rr": 2.93
+    },
+    {
+      "date": "2026-02-20",
+      "symbol": "CSCO",
+      "direction": "CALL",
+      "conviction": "MEDIUM",
+      "score": 67.2,
+      "price": 79.2,
+      "rsi": 50.5,
+      "rr": 6.91
+    }
+  ],
+  "daily_equity": [
+    {
+      "date": "2025-05-22",
+      "cash": 8000.0,
+      "deployed": 0,
+      "total": 8000.0,
+      "positions": 0
+    },
+    {
+      "date": "2025-05-23",
+      "cash": 8000.0,
+      "deployed": 0,
+      "total": 8000.0,
+      "positions": 0
+    },
+    {
+      "date": "2025-05-27",
+      "cash": 8000.0,
+      "deployed": 0,
+      "total": 8000.0,
+      "positions": 0
+    },
+    {
+      "date": "2025-05-28",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-05-29",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-05-30",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-02",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-03",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-04",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-05",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-06",
+      "cash": 6619.85,
+      "deployed": 1380.15,
+      "total": 8000.0,
+      "positions": 1
+    },
+    {
+      "date": "2025-06-09",
+      "cash": 3989.1,
+      "deployed": 4010.9,
+      "total": 8000.0,
+      "positions": 2
+    },
+    {
+      "date": "2025-06-10",
+      "cash": 3547.5,
+      "deployed": 4452.5,
+      "total": 8000.0,
+      "positions": 3
+    },
+    {
+      "date": "2025-06-11",
+      "cash": 3547.5,
+      "deployed": 4452.5,
+      "total": 8000.0,
+      "positions": 3
+    },
+    {
+      "date": "2025-06-12",
+      "cash": 3547.5,
+      "deployed": 4452.5,
+      "total": 8000.0,
+      "positions": 3
+    },
+    {
+      "date": "2025-06-13",
+      "cash": 1589.1,
+      "deployed": 6410.9,
+      "total": 8000.0,
+      "positions": 4
+    },
+    {
+      "date": "2025-06-16",
+      "cash": 1589.1,
+      "deployed": 6410.9,
+      "total": 8000.0,
+      "positions": 4
+    },
+    {
+      "date": "2025-06-17",
+      "cash": 1589.1,
+      "deployed": 6410.9,
+      "total": 8000.0,
+      "positions": 4
+    },
+    {
+      "date": "2025-06-18",
+      "cash": 1192.65,
+      "deployed": 6807.35,
+      "total": 8000.0,
+      "positions": 5
+    },
+    {
+      "date": "2025-07-11",
+      "cash": 2258.5,
+      "deployed": 5427.2,
+      "total": 7685.7,
+      "positions": 4
+    },
+    {
+      "date": "2025-07-14",
+      "cash": 2258.5,
+      "deployed": 5427.2,
+      "total": 7685.7,
+      "positions": 4
+    },
+    {
+      "date": "2025-07-15",
+      "cash": 2258.5,
+      "deployed": 5427.2,
+      "total": 7685.7,
+      "positions": 4
+    },
+    {
+      "date": "2025-07-16",
+      "cash": 2258.5,
+      "deployed": 5427.2,
+      "total": 7685.7,
+      "positions": 4
+    },
+    {
+      "date": "2025-07-17",
+      "cash": 1121.05,
+      "deployed": 6564.65,
+      "total": 7685.7,
+      "positions": 5
+    },
+    {
+      "date": "2025-07-23",
+      "cash": 3328.3,
+      "deployed": 3933.9,
+      "total": 7262.2,
+      "positions": 4
+    },
+    {
+      "date": "2025-07-24",
+      "cash": 3808.4,
+      "deployed": 3492.3,
+      "total": 7300.7,
+      "positions": 3
+    },
+    {
+      "date": "2025-07-25",
+      "cash": 3808.4,
+      "deployed": 3492.3,
+      "total": 7300.7,
+      "positions": 3
+    },
+    {
+      "date": "2025-07-28",
+      "cash": 3808.4,
+      "deployed": 3492.3,
+      "total": 7300.7,
+      "positions": 3
+    },
+    {
+      "date": "2025-07-29",
+      "cash": 5399.65,
+      "deployed": 1533.9,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-07-30",
+      "cash": 1923.6,
+      "deployed": 5009.95,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-07-31",
+      "cash": 1923.6,
+      "deployed": 5009.95,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-01",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-04",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-05",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-06",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-07",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-08",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-11",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-12",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-13",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-14",
+      "cash": 2320.05,
+      "deployed": 4613.5,
+      "total": 6933.55,
+      "positions": 2
+    },
+    {
+      "date": "2025-08-15",
+      "cash": 800.0,
+      "deployed": 6133.55,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-18",
+      "cash": 800.0,
+      "deployed": 6133.55,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-19",
+      "cash": 800.0,
+      "deployed": 6133.55,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-20",
+      "cash": 800.0,
+      "deployed": 6133.55,
+      "total": 6933.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-21",
+      "cash": 310.2,
+      "deployed": 6623.35,
+      "total": 6933.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-08-22",
+      "cash": 310.2,
+      "deployed": 6623.35,
+      "total": 6933.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-08-25",
+      "cash": 310.2,
+      "deployed": 6623.35,
+      "total": 6933.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-08-26",
+      "cash": 310.2,
+      "deployed": 6623.35,
+      "total": 6933.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-08-27",
+      "cash": 310.2,
+      "deployed": 6623.35,
+      "total": 6933.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-08-28",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-08-29",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-09-02",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-09-03",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-09-04",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-09-05",
+      "cash": 1357.7,
+      "deployed": 5485.9,
+      "total": 6843.6,
+      "positions": 3
+    },
+    {
+      "date": "2025-09-08",
+      "cash": 7.2,
+      "deployed": 6836.4,
+      "total": 6843.6,
+      "positions": 5
+    },
+    {
+      "date": "2025-09-11",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-12",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-15",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-16",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-17",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-18",
+      "cash": 4457.83,
+      "deployed": 3360.35,
+      "total": 7818.18,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-19",
+      "cash": 697.88,
+      "deployed": 7120.3,
+      "total": 7818.18,
+      "positions": 5
+    },
+    {
+      "date": "2025-09-29",
+      "cash": 2198.15,
+      "deployed": 5600.25,
+      "total": 7798.4,
+      "positions": 4
+    },
+    {
+      "date": "2025-09-30",
+      "cash": 2198.15,
+      "deployed": 5600.25,
+      "total": 7798.4,
+      "positions": 4
+    },
+    {
+      "date": "2025-10-01",
+      "cash": 2198.15,
+      "deployed": 5600.25,
+      "total": 7798.4,
+      "positions": 4
+    },
+    {
+      "date": "2025-10-02",
+      "cash": 2198.15,
+      "deployed": 5600.25,
+      "total": 7798.4,
+      "positions": 4
+    },
+    {
+      "date": "2025-10-03",
+      "cash": 2759.87,
+      "deployed": 5110.45,
+      "total": 7870.32,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-06",
+      "cash": 2759.87,
+      "deployed": 5110.45,
+      "total": 7870.32,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-07",
+      "cash": 2759.87,
+      "deployed": 5110.45,
+      "total": 7870.32,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-08",
+      "cash": 2759.87,
+      "deployed": 5110.45,
+      "total": 7870.32,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-09",
+      "cash": 2759.87,
+      "deployed": 5110.45,
+      "total": 7870.32,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-10",
+      "cash": 1632.62,
+      "deployed": 6237.7,
+      "total": 7870.32,
+      "positions": 4
+    },
+    {
+      "date": "2025-10-13",
+      "cash": 1632.62,
+      "deployed": 6237.7,
+      "total": 7870.32,
+      "positions": 4
+    },
+    {
+      "date": "2025-10-14",
+      "cash": 122.22,
+      "deployed": 7748.1,
+      "total": 7870.32,
+      "positions": 5
+    },
+    {
+      "date": "2025-10-20",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-21",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-22",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-23",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-24",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-27",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-28",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-29",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-30",
+      "cash": 1712.83,
+      "deployed": 6397.6,
+      "total": 8110.43,
+      "positions": 3
+    },
+    {
+      "date": "2025-10-31",
+      "cash": 4931.1,
+      "deployed": 3209.45,
+      "total": 8140.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-11-03",
+      "cash": 4931.1,
+      "deployed": 3209.45,
+      "total": 8140.55,
+      "positions": 3
+    },
+    {
+      "date": "2025-11-04",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-05",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-06",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-07",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-10",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-11",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-12",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-13",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-14",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-17",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-18",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-19",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-20",
+      "cash": 227.4,
+      "deployed": 7913.15,
+      "total": 8140.55,
+      "positions": 4
+    },
+    {
+      "date": "2025-11-21",
+      "cash": 1368.13,
+      "deployed": 6785.9,
+      "total": 8154.03,
+      "positions": 3
+    },
+    {
+      "date": "2025-11-24",
+      "cash": 1368.13,
+      "deployed": 6785.9,
+      "total": 8154.03,
+      "positions": 3
+    },
+    {
+      "date": "2025-11-25",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-11-26",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-11-28",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-01",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-02",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-03",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-04",
+      "cash": 2894.63,
+      "deployed": 5275.5,
+      "total": 8170.13,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-05",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-08",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-09",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-10",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-11",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-12",
+      "cash": 1163.33,
+      "deployed": 7006.8,
+      "total": 8170.13,
+      "positions": 3
+    },
+    {
+      "date": "2025-12-15",
+      "cash": 1794.63,
+      "deployed": 6435.0,
+      "total": 8229.63,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-16",
+      "cash": 1794.63,
+      "deployed": 6435.0,
+      "total": 8229.63,
+      "positions": 2
+    },
+    {
+      "date": "2025-12-17",
+      "cash": 5131.75,
+      "deployed": 1731.3,
+      "total": 6863.05,
+      "positions": 1
+    },
+    {
+      "date": "2025-12-18",
+      "cash": 5131.75,
+      "deployed": 1731.3,
+      "total": 6863.05,
+      "positions": 1
+    },
+    {
+      "date": "2025-12-19",
+      "cash": 2494.75,
+      "deployed": 4368.3,
+      "total": 6863.05,
+      "positions": 4
+    },
+    {
+      "date": "2025-12-22",
+      "cash": 2494.75,
+      "deployed": 4368.3,
+      "total": 6863.05,
+      "positions": 4
+    },
+    {
+      "date": "2025-12-23",
+      "cash": 2494.75,
+      "deployed": 4368.3,
+      "total": 6863.05,
+      "positions": 4
+    },
+    {
+      "date": "2025-12-24",
+      "cash": 2494.75,
+      "deployed": 4368.3,
+      "total": 6863.05,
+      "positions": 4
+    },
+    {
+      "date": "2025-12-26",
+      "cash": 1542.1,
+      "deployed": 5320.95,
+      "total": 6863.05,
+      "positions": 5
+    },
+    {
+      "date": "2026-01-13",
+      "cash": 1424.63,
+      "deployed": 4802.65,
+      "total": 6227.28,
+      "positions": 5
+    },
+    {
+      "date": "2026-02-04",
+      "cash": 656.86,
+      "deployed": 5624.75,
+      "total": 6281.61,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-05",
+      "cash": 656.86,
+      "deployed": 5624.75,
+      "total": 6281.61,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-06",
+      "cash": 1304.96,
+      "deployed": 4411.75,
+      "total": 5716.71,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-09",
+      "cash": 1304.96,
+      "deployed": 4411.75,
+      "total": 5716.71,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-10",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-11",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-12",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-13",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-17",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-18",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-19",
+      "cash": 854.39,
+      "deployed": 4827.5,
+      "total": 5681.89,
+      "positions": 2
+    },
+    {
+      "date": "2026-02-20",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-23",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-24",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-25",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-26",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-02-27",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-03-02",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    },
+    {
+      "date": "2026-03-03",
+      "cash": 458.39,
+      "deployed": 5223.5,
+      "total": 5681.89,
+      "positions": 3
+    }
+  ]
+}

@@ -1,0 +1,688 @@
+{
+  "date": "2026-03-09",
+  "total_scanned": 50,
+  "top_bullish": [
+    {
+      "symbol": "CSCO",
+      "score": 76.1,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 65.0,
+        "options_flow": 0,
+        "fundamental": 62.5,
+        "market_context": 42.2,
+        "risk_reward": 82.5
+      },
+      "trade_params": {
+        "entry_price": 78.64,
+        "stop_loss": 77.02,
+        "target_1": 81.07,
+        "target_2": 82.69,
+        "target_3": 85.12,
+        "atr": 2.09,
+        "stop_type": "sma_50"
+      },
+      "sector": "Technology"
+    },
+    {
+      "symbol": "LOW",
+      "score": 75.1,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 67.8,
+        "options_flow": 0,
+        "fundamental": 63.2,
+        "market_context": 34.2,
+        "risk_reward": 80.0
+      },
+      "trade_params": {
+        "entry_price": 251.89,
+        "stop_loss": 242.52,
+        "target_1": 265.94,
+        "target_2": 275.31,
+        "target_3": 289.37,
+        "atr": 6.91,
+        "stop_type": "sma_200"
+      },
+      "sector": "Consumer Discretionary"
+    },
+    {
+      "symbol": "AMAT",
+      "score": 75.1,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 67.0,
+        "options_flow": 0,
+        "fundamental": 61.5,
+        "market_context": 38.2,
+        "risk_reward": 79.5
+      },
+      "trade_params": {
+        "entry_price": 324.74,
+        "stop_loss": 314.15,
+        "target_1": 340.62,
+        "target_2": 351.21,
+        "target_3": 367.1,
+        "atr": 18.06,
+        "stop_type": "sma_50"
+      },
+      "sector": "Technology"
+    },
+    {
+      "symbol": "CAT",
+      "score": 74.2,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 67.5,
+        "options_flow": 0,
+        "fundamental": 66.2,
+        "market_context": 28.2,
+        "risk_reward": 79.5
+      },
+      "trade_params": {
+        "entry_price": 680.9,
+        "stop_loss": 661.7,
+        "target_1": 709.7,
+        "target_2": 728.9,
+        "target_3": 757.7,
+        "atr": 29.67,
+        "stop_type": "sma_50"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "TXN",
+      "score": 73.9,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 59.5,
+        "options_flow": 0,
+        "fundamental": 66.2,
+        "market_context": 38.2,
+        "risk_reward": 84.5
+      },
+      "trade_params": {
+        "entry_price": 193.23,
+        "stop_loss": 186.7,
+        "target_1": 203.02,
+        "target_2": 209.55,
+        "target_3": 219.35,
+        "atr": 6.46,
+        "stop_type": "sma_200"
+      },
+      "sector": "Technology"
+    },
+    {
+      "symbol": "WMT",
+      "score": 73.0,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 65.5,
+        "options_flow": 0,
+        "fundamental": 61.8,
+        "market_context": 36.2,
+        "risk_reward": 75.0
+      },
+      "trade_params": {
+        "entry_price": 123.8,
+        "stop_loss": 119.56,
+        "target_1": 130.16,
+        "target_2": 134.4,
+        "target_3": 140.76,
+        "atr": 3.39,
+        "stop_type": "sma_50"
+      },
+      "sector": "Consumer Staples"
+    },
+    {
+      "symbol": "KO",
+      "score": 72.7,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 67.0,
+        "options_flow": 0,
+        "fundamental": 67.8,
+        "market_context": 32.2,
+        "risk_reward": 69.0
+      },
+      "trade_params": {
+        "entry_price": 77.04,
+        "stop_loss": 74.01,
+        "target_1": 81.59,
+        "target_2": 84.62,
+        "target_3": 89.16,
+        "atr": 1.33,
+        "stop_type": "sma_50"
+      },
+      "sector": "Consumer Staples"
+    },
+    {
+      "symbol": "GE",
+      "score": 72.7,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 63.5,
+        "options_flow": 0,
+        "fundamental": 68.5,
+        "market_context": 28.2,
+        "risk_reward": 79.5
+      },
+      "trade_params": {
+        "entry_price": 323.11,
+        "stop_loss": 313.91,
+        "target_1": 336.91,
+        "target_2": 346.11,
+        "target_3": 359.91,
+        "atr": 11.43,
+        "stop_type": "sma_50"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "PM",
+      "score": 71.6,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 60.0,
+        "options_flow": 0,
+        "fundamental": 67.8,
+        "market_context": 28.2,
+        "risk_reward": 82.5
+      },
+      "trade_params": {
+        "entry_price": 169.98,
+        "stop_loss": 164.93,
+        "target_1": 177.55,
+        "target_2": 182.6,
+        "target_3": 190.18,
+        "atr": 5.13,
+        "stop_type": "sma_200"
+      },
+      "sector": "Consumer Staples"
+    },
+    {
+      "symbol": "XOM",
+      "score": 71.5,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 68.8,
+        "options_flow": 0,
+        "fundamental": 53.2,
+        "market_context": 41.2,
+        "risk_reward": 39.0
+      },
+      "trade_params": {
+        "entry_price": 151.21,
+        "stop_loss": 135.97,
+        "target_1": 174.07,
+        "target_2": 189.31,
+        "target_3": 212.17,
+        "atr": 4.18,
+        "stop_type": "sma_50"
+      },
+      "sector": "Energy"
+    },
+    {
+      "symbol": "NEE",
+      "score": 71.2,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 65.0,
+        "options_flow": 0,
+        "fundamental": 73.0,
+        "market_context": 38.2,
+        "risk_reward": 55.5
+      },
+      "trade_params": {
+        "entry_price": 91.02,
+        "stop_loss": 85.81,
+        "target_1": 98.83,
+        "target_2": 104.04,
+        "target_3": 111.86,
+        "atr": 2.24,
+        "stop_type": "sma_50"
+      },
+      "sector": "Utilities"
+    },
+    {
+      "symbol": "BA",
+      "score": 71.2,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 62.5,
+        "options_flow": 0,
+        "fundamental": 69.2,
+        "market_context": 39.2,
+        "risk_reward": 63.0
+      },
+      "trade_params": {
+        "entry_price": 231.11,
+        "stop_loss": 215.06,
+        "target_1": 255.19,
+        "target_2": 271.24,
+        "target_3": 295.31,
+        "atr": 7.74,
+        "stop_type": "sma_200"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "PEP",
+      "score": 70.0,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 69.0,
+        "options_flow": 0,
+        "fundamental": 56.5,
+        "market_context": 28.2,
+        "risk_reward": 69.0
+      },
+      "trade_params": {
+        "entry_price": 159.43,
+        "stop_loss": 152.82,
+        "target_1": 169.34,
+        "target_2": 175.95,
+        "target_3": 185.87,
+        "atr": 3.45,
+        "stop_type": "sma_50"
+      },
+      "sector": "Consumer Staples"
+    },
+    {
+      "symbol": "COST",
+      "score": 68.2,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 68.0,
+        "options_flow": 0,
+        "fundamental": 59.5,
+        "market_context": 39.2,
+        "risk_reward": 49.5
+      },
+      "trade_params": {
+        "entry_price": 998.1,
+        "stop_loss": 945.29,
+        "target_1": 1077.31,
+        "target_2": 1130.12,
+        "target_3": 1209.34,
+        "atr": 22.93,
+        "stop_type": "sma_50"
+      },
+      "sector": "Consumer Staples"
+    },
+    {
+      "symbol": "MRK",
+      "score": 67.4,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 69.5,
+        "options_flow": 0,
+        "fundamental": 65.5,
+        "market_context": 28.2,
+        "risk_reward": 79.5
+      },
+      "trade_params": {
+        "entry_price": 115.79,
+        "stop_loss": 112.24,
+        "target_1": 121.12,
+        "target_2": 124.67,
+        "target_3": 129.99,
+        "atr": 3.28,
+        "stop_type": "sma_50"
+      },
+      "sector": "Healthcare"
+    },
+    {
+      "symbol": "UNP",
+      "score": 66.8,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 63.5,
+        "options_flow": 0,
+        "fundamental": 59.2,
+        "market_context": 32.2,
+        "risk_reward": 60.0
+      },
+      "trade_params": {
+        "entry_price": 254.11,
+        "stop_loss": 241.58,
+        "target_1": 272.91,
+        "target_2": 285.44,
+        "target_3": 304.23,
+        "atr": 5.92,
+        "stop_type": "sma_50"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "RTX",
+      "score": 66.6,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 68.0,
+        "options_flow": 0,
+        "fundamental": 63.2,
+        "market_context": 39.2,
+        "risk_reward": 39.0
+      },
+      "trade_params": {
+        "entry_price": 209.76,
+        "stop_loss": 193.73,
+        "target_1": 233.8,
+        "target_2": 249.83,
+        "target_3": 273.88,
+        "atr": 6.47,
+        "stop_type": "sma_50"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "GILD",
+      "score": 66.4,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 69.5,
+        "options_flow": 0,
+        "fundamental": 67.8,
+        "market_context": 36.2,
+        "risk_reward": 64.5
+      },
+      "trade_params": {
+        "entry_price": 143.93,
+        "stop_loss": 135.84,
+        "target_1": 156.06,
+        "target_2": 164.15,
+        "target_3": 176.29,
+        "atr": 3.81,
+        "stop_type": "sma_50"
+      },
+      "sector": "Healthcare"
+    },
+    {
+      "symbol": "HON",
+      "score": 66.0,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 65.5,
+        "options_flow": 0,
+        "fundamental": 56.2,
+        "market_context": 32.2,
+        "risk_reward": 55.5
+      },
+      "trade_params": {
+        "entry_price": 235.29,
+        "stop_loss": 221.52,
+        "target_1": 255.94,
+        "target_2": 269.71,
+        "target_3": 290.37,
+        "atr": 5.63,
+        "stop_type": "sma_50"
+      },
+      "sector": "Industrials"
+    },
+    {
+      "symbol": "LIN",
+      "score": 62.6,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 65.2,
+        "options_flow": 0,
+        "fundamental": 67.8,
+        "market_context": 36.2,
+        "risk_reward": 55.5
+      },
+      "trade_params": {
+        "entry_price": 484.74,
+        "stop_loss": 455.11,
+        "target_1": 529.18,
+        "target_2": 558.81,
+        "target_3": 603.26,
+        "atr": 10.55,
+        "stop_type": "sma_50"
+      },
+      "sector": "Materials"
+    }
+  ],
+  "top_bearish": [
+    {
+      "symbol": "JPM",
+      "score": 71.4,
+      "action": "ENTER",
+      "sub_scores": {
+        "technical": 70.2,
+        "options_flow": 0,
+        "fundamental": 65.5,
+        "market_context": 34.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "V",
+      "score": 68.2,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 63.8,
+        "options_flow": 0,
+        "fundamental": 71.5,
+        "market_context": 38.2,
+        "risk_reward": 72.5
+      }
+    },
+    {
+      "symbol": "MA",
+      "score": 66.1,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 60.8,
+        "options_flow": 0,
+        "fundamental": 71.5,
+        "market_context": 42.2,
+        "risk_reward": 65.0
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "score": 64.3,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 64.8,
+        "options_flow": 0,
+        "fundamental": 71.5,
+        "market_context": 49.2,
+        "risk_reward": 71.0
+      }
+    },
+    {
+      "symbol": "META",
+      "score": 63.6,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 67.8,
+        "options_flow": 0,
+        "fundamental": 75.2,
+        "market_context": 42.2,
+        "risk_reward": 65.0
+      }
+    },
+    {
+      "symbol": "SPGI",
+      "score": 63.0,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 61.8,
+        "options_flow": 0,
+        "fundamental": 67.8,
+        "market_context": 45.2,
+        "risk_reward": 50.0
+      }
+    },
+    {
+      "symbol": "PG",
+      "score": 60.6,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 64.0,
+        "options_flow": 0,
+        "fundamental": 62.5,
+        "market_context": 28.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "score": 60.5,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 64.8,
+        "options_flow": 0,
+        "fundamental": 68.5,
+        "market_context": 45.2,
+        "risk_reward": 59.0
+      }
+    },
+    {
+      "symbol": "MDLZ",
+      "score": 60.2,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 62.5,
+        "options_flow": 0,
+        "fundamental": 59.5,
+        "market_context": 32.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "ADBE",
+      "score": 60.0,
+      "action": "ENTER_REDUCED",
+      "sub_scores": {
+        "technical": 61.2,
+        "options_flow": 0,
+        "fundamental": 69.2,
+        "market_context": 49.2,
+        "risk_reward": 59.0
+      }
+    },
+    {
+      "symbol": "ACN",
+      "score": 59.7,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 64.8,
+        "options_flow": 0,
+        "fundamental": 62.5,
+        "market_context": 49.2,
+        "risk_reward": 57.0
+      }
+    },
+    {
+      "symbol": "CRM",
+      "score": 59.2,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 62.2,
+        "options_flow": 0,
+        "fundamental": 68.5,
+        "market_context": 49.2,
+        "risk_reward": 54.0
+      }
+    },
+    {
+      "symbol": "NFLX",
+      "score": 58.3,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 63.5,
+        "options_flow": 0,
+        "fundamental": 71.5,
+        "market_context": 49.2,
+        "risk_reward": 44.0
+      }
+    },
+    {
+      "symbol": "BKNG",
+      "score": 58.3,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 64.8,
+        "options_flow": 0,
+        "fundamental": 71.5,
+        "market_context": 45.2,
+        "risk_reward": 45.0
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "score": 57.8,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 41.5,
+        "options_flow": 0,
+        "fundamental": 75.2,
+        "market_context": 46.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "DHR",
+      "score": 57.6,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 71.2,
+        "options_flow": 0,
+        "fundamental": 64.8,
+        "market_context": 28.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "TMO",
+      "score": 57.2,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 66.2,
+        "options_flow": 0,
+        "fundamental": 64.8,
+        "market_context": 36.2,
+        "risk_reward": 84.5
+      }
+    },
+    {
+      "symbol": "HD",
+      "score": 57.0,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 66.2,
+        "options_flow": 0,
+        "fundamental": 53.2,
+        "market_context": 34.2,
+        "risk_reward": 65.0
+      }
+    },
+    {
+      "symbol": "ISRG",
+      "score": 55.9,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 64.8,
+        "options_flow": 0,
+        "fundamental": 69.2,
+        "market_context": 36.2,
+        "risk_reward": 75.5
+      }
+    },
+    {
+      "symbol": "UNH",
+      "score": 55.1,
+      "action": "WATCHLIST",
+      "sub_scores": {
+        "technical": 67.8,
+        "options_flow": 0,
+        "fundamental": 63.2,
+        "market_context": 36.2,
+        "risk_reward": 71.0
+      }
+    }
+  ]
+}

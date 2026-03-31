@@ -1,0 +1,539 @@
+{
+  "date": "2026-03-12",
+  "equity": 8000.0,
+  "mode": "AGGRESSIVE_v3",
+  "vix": 27.29,
+  "regime": "UNKNOWN",
+  "trades": [
+    {
+      "symbol": "PG",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "contract": {
+        "symbol": "PG    260417C00150000",
+        "desc": "PG 04/17/2026 150.00 C",
+        "strike": 150.0,
+        "dte": 36,
+        "delta": 0.537,
+        "gamma": 0.036,
+        "theta": -0.063,
+        "iv": 23.5,
+        "bid": 5.1,
+        "ask": 5.4,
+        "mid": 5.25,
+        "spread_pct": 0.0571,
+        "cost_per": 525.0,
+        "volume": 24,
+        "oi": 1578,
+        "qty": 1,
+        "total_cost": 525.0,
+        "score": 60.5
+      },
+      "analysis": {
+        "symbol": "PG",
+        "price": 150.5,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100
+        },
+        "levels": {
+          "support": 142.97,
+          "resistance": 165.55,
+          "high_52w": 0,
+          "atr": 3.01,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 6.02,
+        "total_premium": 1815506.0,
+        "top_strikes": [
+          {
+            "type": "CALL",
+            "strike": 160.0,
+            "dte": 36,
+            "volume": 12134,
+            "oi": 5997,
+            "vol_oi": 2.0,
+            "mid": 1.46,
+            "delta": 0.227,
+            "iv": 24.5,
+            "premium": 1771564.0
+          },
+          {
+            "type": "PUT",
+            "strike": 149.0,
+            "dte": 8,
+            "volume": 279,
+            "oi": 45,
+            "vol_oi": 6.2,
+            "mid": 1.57,
+            "delta": 0.385,
+            "iv": 25.8,
+            "premium": 43942.0
+          }
+        ]
+      },
+      "entry_price": 150.5,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "XOM",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "contract": {
+        "symbol": "XOM   260417C00155000",
+        "desc": "XOM 04/17/2026 155.00 C",
+        "strike": 155.0,
+        "dte": 36,
+        "delta": 0.487,
+        "gamma": 0.026,
+        "theta": -0.089,
+        "iv": 32.3,
+        "bid": 5.5,
+        "ask": 5.7,
+        "mid": 5.6,
+        "spread_pct": 0.0357,
+        "cost_per": 560.0,
+        "volume": 781,
+        "oi": 10256,
+        "qty": 1,
+        "total_cost": 560.0,
+        "score": 69.5
+      },
+      "analysis": {
+        "symbol": "XOM",
+        "price": 153.53,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100
+        },
+        "levels": {
+          "support": 145.85,
+          "resistance": 168.88,
+          "high_52w": 0,
+          "atr": 3.07,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 2.75,
+        "total_premium": 647587.0,
+        "top_strikes": [
+          {
+            "type": "CALL",
+            "strike": 152.5,
+            "dte": 21,
+            "volume": 460,
+            "oi": 243,
+            "vol_oi": 1.9,
+            "mid": 5.47,
+            "delta": 0.552,
+            "iv": 31.6,
+            "premium": 251850.0
+          },
+          {
+            "type": "PUT",
+            "strike": 148.0,
+            "dte": 29,
+            "volume": 414,
+            "oi": 266,
+            "vol_oi": 1.6,
+            "mid": 3.02,
+            "delta": 0.322,
+            "iv": 31.8,
+            "premium": 125235.0
+          },
+          {
+            "type": "CALL",
+            "strike": 165.0,
+            "dte": 29,
+            "volume": 644,
+            "oi": 357,
+            "vol_oi": 1.8,
+            "mid": 1.75,
+            "delta": 0.227,
+            "iv": 32.0,
+            "premium": 112378.0
+          }
+        ]
+      },
+      "entry_price": 153.53,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "KO",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "contract": {
+        "symbol": "KO    260417C00077500",
+        "desc": "KO 04/17/2026 77.50 C",
+        "strike": 77.5,
+        "dte": 36,
+        "delta": 0.49,
+        "gamma": 0.078,
+        "theta": -0.023,
+        "iv": 21.9,
+        "bid": 1.88,
+        "ask": 2.0,
+        "mid": 1.94,
+        "spread_pct": 0.0619,
+        "cost_per": 194.0,
+        "volume": 770,
+        "oi": 2772,
+        "qty": 5,
+        "total_cost": 970.0,
+        "score": 69.6
+      },
+      "analysis": {
+        "symbol": "KO",
+        "price": 77.61,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100
+        },
+        "levels": {
+          "support": 73.73,
+          "resistance": 85.37,
+          "high_52w": 0,
+          "atr": 1.55,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 42.15,
+        "total_premium": 150774257.0,
+        "top_strikes": [
+          {
+            "type": "CALL",
+            "strike": 72.5,
+            "dte": 8,
+            "volume": 122277,
+            "oi": 11659,
+            "vol_oi": 10.5,
+            "mid": 5.3,
+            "delta": 1.0,
+            "iv": 31.6,
+            "premium": 64806810.0
+          },
+          {
+            "type": "CALL",
+            "strike": 70.0,
+            "dte": 8,
+            "volume": 67705,
+            "oi": 3817,
+            "vol_oi": 17.7,
+            "mid": 7.7,
+            "delta": 1.0,
+            "iv": 41.2,
+            "premium": 52132850.0
+          },
+          {
+            "type": "CALL",
+            "strike": 67.5,
+            "dte": 8,
+            "volume": 31515,
+            "oi": 2047,
+            "vol_oi": 15.4,
+            "mid": 10.38,
+            "delta": 1.0,
+            "iv": 47.4,
+            "premium": 32696812.0
+          }
+        ]
+      },
+      "entry_price": 77.61,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "LOW",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100,
+      "contract": {
+        "symbol": "LOW   260417P00240000",
+        "desc": "LOW 04/17/2026 240.00 P",
+        "strike": 240.0,
+        "dte": 36,
+        "delta": 0.492,
+        "gamma": 0.02,
+        "theta": -0.112,
+        "iv": 27.1,
+        "bid": 7.75,
+        "ask": 8.9,
+        "mid": 8.32,
+        "spread_pct": 0.1381,
+        "cost_per": 832.5,
+        "volume": 91,
+        "oi": 519,
+        "qty": 1,
+        "total_cost": 832.5,
+        "score": 48.9
+      },
+      "analysis": {
+        "symbol": "LOW",
+        "price": 239.45,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100
+        },
+        "levels": {
+          "support": 227.48,
+          "resistance": 263.39,
+          "high_52w": 0,
+          "atr": 4.79,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 0.25,
+        "total_premium": 1299470.0,
+        "top_strikes": [
+          {
+            "type": "PUT",
+            "strike": 272.5,
+            "dte": 8,
+            "volume": 398,
+            "oi": 5,
+            "vol_oi": 79.6,
+            "mid": 32.65,
+            "delta": 0.951,
+            "iv": 52.0,
+            "premium": 1299470.0
+          }
+        ]
+      },
+      "entry_price": 239.45,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "GILD",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "contract": {
+        "symbol": "GILD  260417C00145000",
+        "desc": "GILD 04/17/2026 145.00 C",
+        "strike": 145.0,
+        "dte": 36,
+        "delta": 0.505,
+        "gamma": 0.03,
+        "theta": -0.066,
+        "iv": 29.5,
+        "bid": 5.45,
+        "ask": 5.75,
+        "mid": 5.6,
+        "spread_pct": 0.0536,
+        "cost_per": 560.0,
+        "volume": 106,
+        "oi": 677,
+        "qty": 1,
+        "total_cost": 560.0,
+        "score": 59.5
+      },
+      "analysis": {
+        "symbol": "GILD",
+        "price": 145.21,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 100
+        },
+        "levels": {
+          "support": 137.95,
+          "resistance": 159.73,
+          "high_52w": 0,
+          "atr": 2.9,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 33.03,
+        "total_premium": 55757077.0,
+        "top_strikes": [
+          {
+            "type": "CALL",
+            "strike": 130.0,
+            "dte": 8,
+            "volume": 36414,
+            "oi": 1812,
+            "vol_oi": 20.1,
+            "mid": 15.22,
+            "delta": 1.0,
+            "iv": 42.1,
+            "premium": 55440315.0
+          },
+          {
+            "type": "PUT",
+            "strike": 144.0,
+            "dte": 15,
+            "volume": 1004,
+            "oi": 27,
+            "vol_oi": 37.2,
+            "mid": 3.16,
+            "delta": 0.44,
+            "iv": 31.5,
+            "premium": 316762.0
+          }
+        ]
+      },
+      "entry_price": 145.21,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "AMZN",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 95,
+      "contract": {
+        "symbol": "AMZN  260417P00210000",
+        "desc": "AMZN 04/17/2026 210.00 P",
+        "strike": 210.0,
+        "dte": 36,
+        "delta": 0.488,
+        "gamma": 0.018,
+        "theta": -0.126,
+        "iv": 34.1,
+        "bid": 9.0,
+        "ask": 9.4,
+        "mid": 9.2,
+        "spread_pct": 0.0435,
+        "cost_per": 920.0,
+        "volume": 417,
+        "oi": 6630,
+        "qty": 1,
+        "total_cost": 920.0,
+        "score": 62.5
+      },
+      "analysis": {
+        "symbol": "AMZN",
+        "price": 209.53,
+        "composite": 95,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.1275,
+        "sub_scores": {
+          "flow": 95
+        },
+        "levels": {
+          "support": 199.05,
+          "resistance": 230.48,
+          "high_52w": 0,
+          "atr": 4.19,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "UNKNOWN",
+        "vix": 27.29
+      },
+      "flow_summary": {
+        "strength": 4,
+        "cp_ratio": 0.61,
+        "total_premium": 342862452.0,
+        "top_strikes": [
+          {
+            "type": "PUT",
+            "strike": 235.0,
+            "dte": 8,
+            "volume": 57851,
+            "oi": 10033,
+            "vol_oi": 5.8,
+            "mid": 25.65,
+            "delta": 1.0,
+            "iv": 36.8,
+            "premium": 148387815.0
+          },
+          {
+            "type": "PUT",
+            "strike": 250.0,
+            "dte": 36,
+            "volume": 22710,
+            "oi": 2261,
+            "vol_oi": 10.0,
+            "mid": 40.42,
+            "delta": 0.963,
+            "iv": 30.8,
+            "premium": 91805175.0
+          },
+          {
+            "type": "PUT",
+            "strike": 250.0,
+            "dte": 8,
+            "volume": 13331,
+            "oi": 475,
+            "vol_oi": 28.1,
+            "mid": 41.05,
+            "delta": 1.0,
+            "iv": 46.6,
+            "premium": 54723755.0
+          }
+        ]
+      },
+      "entry_price": 209.53,
+      "stop_pct": 0.35,
+      "target_1_pct": 0.5,
+      "target_2_pct": 1.0,
+      "max_hold_days": 30
+    }
+  ],
+  "total_cost": 4367.5,
+  "deployment_pct": 54.6
+}

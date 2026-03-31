@@ -1,0 +1,281 @@
+{
+  "date": "2026-03-19",
+  "equity": 7872.0,
+  "mode": "ELITE_v6_GEX_EV",
+  "vix": 25.66,
+  "vol_regime": {
+    "level": "HIGH",
+    "trend": "STABLE",
+    "signal": "NEUTRAL",
+    "strategy_bias": "ANY",
+    "size_modifier": 1.0,
+    "current_vix": 25.66
+  },
+  "regime": "TRENDING_DOWN",
+  "trades": [
+    {
+      "symbol": "OXY",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85.0,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 88,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "OXY   260417C00060000",
+            "desc": "OXY 04/17/2026 60.00 C",
+            "strike": 60.0,
+            "dte": 29,
+            "delta": 0.511,
+            "iv": 39.6,
+            "bid": 2.41,
+            "ask": 2.75,
+            "mid": 2.58,
+            "spread_pct": 0.1318,
+            "qty": 7,
+            "total_cost": 1806.0,
+            "oi": 14848,
+            "volume": 919,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.58,
+        "max_loss": 2.58,
+        "max_profit": "unlimited",
+        "breakeven": 62.58,
+        "qty": 7,
+        "total_cost": 1806.0,
+        "description": "Long 60.0 CALL"
+      },
+      "analysis": {
+        "symbol": "OXY",
+        "price": 59.98,
+        "composite": 85.0,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.2444,
+        "sub_scores": {
+          "flow": 85.0
+        },
+        "levels": {
+          "support": 56.98,
+          "resistance": 65.98,
+          "high_52w": 0,
+          "atr": 1.2,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 25.66
+      },
+      "iv_rank": 11.1,
+      "gex": {
+        "net_gex": 83.73,
+        "regime": "POSITIVE",
+        "max_gex_strike": 60.0,
+        "max_gex_value": 33.7,
+        "flip_strike": 57.0,
+        "call_wall": 60.0,
+        "put_wall": 52.0,
+        "suggested_target": 60.0,
+        "key_levels": [
+          {
+            "strike": 60.0,
+            "gex": 33.7
+          },
+          {
+            "strike": 61.0,
+            "gex": 11.81
+          },
+          {
+            "strike": 62.0,
+            "gex": 7.78
+          },
+          {
+            "strike": 65.0,
+            "gex": 6.94
+          },
+          {
+            "strike": 62.5,
+            "gex": 5.76
+          }
+        ]
+      },
+      "ev": {
+        "ev_dollar": 1537.13,
+        "ev_ratio": 0.8511,
+        "prob_profit": 0.681,
+        "prob_max": 0.17,
+        "risk_reward": 12.13,
+        "kelly_fraction": 0.25,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 23.48,
+        "avg_loss": 1.94
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 25.66
+      },
+      "flow_summary": {
+        "strength": 7,
+        "cp_ratio": 3.59,
+        "total_premium": 88492.0,
+        "opening_pct": 26.5
+      },
+      "entry_price": 59.98,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "MRVL",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85.0,
+      "strategy": {
+        "type": "DEBIT_SPREAD",
+        "score": 100,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "MRVL  260417C00090000",
+            "desc": "MRVL 04/17/2026 90.00 C",
+            "strike": 90.0,
+            "delta": 0.452,
+            "bid": 4.0,
+            "ask": 4.25,
+            "mid": 4.12,
+            "iv": 53.176,
+            "oi": 4867,
+            "dte": 29,
+            "leg": "LONG",
+            "qty": 5
+          },
+          {
+            "symbol": "MRVL  260417C00100000",
+            "desc": "MRVL 04/17/2026 100.00 C",
+            "strike": 100.0,
+            "delta": 0.197,
+            "bid": 1.24,
+            "ask": 1.36,
+            "mid": 1.3,
+            "iv": 51.376,
+            "oi": 9560,
+            "dte": 29,
+            "leg": "SHORT",
+            "qty": 5
+          }
+        ],
+        "net_debit": 3.01,
+        "max_loss": 3.01,
+        "max_profit": 6.99,
+        "breakeven": 93.01,
+        "qty": 5,
+        "total_cost": 1505.0,
+        "spread_width": 10.0,
+        "description": "Bull Call 90.0/100.0"
+      },
+      "analysis": {
+        "symbol": "MRVL",
+        "price": 87.53,
+        "composite": 85.0,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.2125,
+        "sub_scores": {
+          "flow": 85.0
+        },
+        "levels": {
+          "support": 83.15,
+          "resistance": 96.28,
+          "high_52w": 0,
+          "atr": 1.75,
+          "rr_ratio": 2.0,
+          "pullback_pct": 0,
+          "rsi": 50
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 25.66
+      },
+      "iv_rank": 50.8,
+      "gex": {
+        "net_gex": 4.23,
+        "regime": "POSITIVE",
+        "max_gex_strike": 95.0,
+        "max_gex_value": 8.08,
+        "flip_strike": 88.0,
+        "call_wall": 95.0,
+        "put_wall": 75.0,
+        "suggested_target": 95.0,
+        "key_levels": [
+          {
+            "strike": 95.0,
+            "gex": 8.08
+          },
+          {
+            "strike": 75.0,
+            "gex": -6.67
+          },
+          {
+            "strike": 100.0,
+            "gex": 3.59
+          },
+          {
+            "strike": 90.0,
+            "gex": 2.71
+          },
+          {
+            "strike": 80.0,
+            "gex": -2.71
+          }
+        ]
+      },
+      "ev": {
+        "ev_dollar": 156.64,
+        "ev_ratio": 0.1041,
+        "prob_profit": 0.602,
+        "prob_max": 0.211,
+        "risk_reward": 1.74,
+        "kelly_fraction": 0.25,
+        "grade": "B",
+        "is_positive": true,
+        "avg_win": 4.19,
+        "avg_loss": 2.41
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 25.66
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 7.3,
+        "total_premium": 706036.0,
+        "opening_pct": 63.1
+      },
+      "entry_price": 87.53,
+      "max_hold_days": 30
+    }
+  ],
+  "total_cost": 3311.0,
+  "deployment_pct": 42.1,
+  "skipped": {
+    "existing": 0,
+    "corr": 13,
+    "filter": 42,
+    "low_score": 29,
+    "no_strategy": 0,
+    "negative_ev": 3
+  },
+  "universe_size": 156,
+  "flow_signals": 89
+}

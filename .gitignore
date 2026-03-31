@@ -1,0 +1,14 @@
+config/schwab_token.json
+.env
+config/trade_log.json
+config/letf_portfolio.json
+config/letf_roth_portfolio.json
+config/analyst_state.json
+config/flow_history.json
+config/paper_options.json
+config/paper_scalp.json
+__pycache__/
+*.pyc
+logs/
+venv/
+.idea/
