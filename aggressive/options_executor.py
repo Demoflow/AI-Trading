@@ -439,22 +439,31 @@ class OptionsExecutor:
                 return {"status": "REJECTED", "reason": "missing_legs"}
             try:
                 from schwab.orders.generic import OrderBuilder
-                from schwab.orders.common import Duration, Session, OrderType
+                from schwab.orders.common import Duration, Session, OrderType, OrderStrategyType, OptionInstruction
                 # Get current mid for limit price
                 try:
                     lq1 = self.client.get_quote(long_leg["symbol"])
                     lq2 = self.client.get_quote(short_leg["symbol"])
                     mid1 = (lq1.json().get(long_leg["symbol"],{}).get("quote",{}).get("bidPrice",0) + lq1.json().get(long_leg["symbol"],{}).get("quote",{}).get("askPrice",0)) / 2
                     mid2 = (lq2.json().get(short_leg["symbol"],{}).get("quote",{}).get("bidPrice",0) + lq2.json().get(short_leg["symbol"],{}).get("quote",{}).get("askPrice",0)) / 2
-                    net_credit = mid1 - mid2
-                    limit = str(round(abs(net_credit) * 0.90, 2))
+                    net_value = mid1 - mid2  # long mark - short mark
+                    if net_value > 0:
+                        # We receive credit (long worth more than short)
+                        limit = str(round(net_value * 0.90, 2))  # Accept 10% less
+                        order_type = OrderType.NET_CREDIT
+                    else:
+                        # We pay debit (short worth more - common for calendars)
+                        limit = str(round(abs(net_value) * 1.10, 2))  # Pay 10% more
+                        order_type = OrderType.NET_DEBIT
                 except Exception:
                     limit = "0.05"
+                    order_type = OrderType.NET_CREDIT
                 order = (OrderBuilder()
-                    .set_order_type(OrderType.NET_CREDIT)
+                    .set_order_type(order_type)
                     .set_price(limit)
                     .set_session(Session.NORMAL)
                     .set_duration(Duration.DAY)
+                    .set_order_strategy_type(OrderStrategyType.SINGLE)
                     .add_option_leg(OptionInstruction.SELL_TO_CLOSE, long_leg["symbol"], long_leg.get("qty", 1))
                     .add_option_leg(OptionInstruction.BUY_TO_CLOSE, short_leg["symbol"], short_leg.get("qty", 1))
                     .build())
@@ -462,6 +471,14 @@ class OptionsExecutor:
                 if resp.status_code in (httpx.codes.CREATED, httpx.codes.OK):
                     logger.info(f"LIVE CLOSE SPREAD: {pos.get('underlying','?')}")
                     return {"status": "FILLED"}
+                # Log rejection reason
+                try:
+                    body = resp.json() if resp.status_code != 429 else {"error": "rate_limited"}
+                    logger.warning(f"SPREAD CLOSE REJECTED {pos.get('underlying','?')}: "
+                                  f"status={resp.status_code} limit=${limit} body={body}")
+                except Exception:
+                    logger.warning(f"SPREAD CLOSE REJECTED {pos.get('underlying','?')}: "
+                                  f"status={resp.status_code} limit=${limit}")
                 return {"status": "REJECTED", "code": resp.status_code}
             except Exception as e:
                 logger.error(f"Live spread close error: {e}")
@@ -476,7 +493,7 @@ class OptionsExecutor:
                 return {"status": "REJECTED", "reason": "missing_legs"}
             try:
                 from schwab.orders.generic import OrderBuilder
-                from schwab.orders.common import Duration, Session, OrderType
+                from schwab.orders.common import Duration, Session, OrderType, OrderStrategyType, OptionInstruction
                 # Get current mid for limit price
                 try:
                     lq1 = self.client.get_quote(short_leg["symbol"])

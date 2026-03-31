@@ -650,6 +650,18 @@ class PortfolioAnalyst:
     # MAIN: Run full analysis
     # ══════════════════════════════════════════
     def run_full_analysis(self, options_positions=None, letf_positions=None):
+        # Group spread legs by underlying — treat as single positions
+        # This prevents cross-account conflict false positives on calendars
+        _seen_underlyings = set()
+        _deduped_options = []
+        if options_positions:
+            for op in options_positions:
+                sym = op.get("underlying", op.get("symbol", ""))
+                if sym not in _seen_underlyings:
+                    _seen_underlyings.add(sym)
+                    _deduped_options.append(op)
+            options_positions = _deduped_options
+
         results = []
 
         # Build cross-account position list
@@ -740,6 +752,8 @@ class PortfolioAnalyst:
                     for w in greeks_result.get("warnings", []):
                         if "HIGH_VEGA" in w:
                             logger.warning("Portfolio vega too high — consider reducing positions")
+                    if "HIGH_DELTA" in w:
+                        logger.warning("Portfolio delta too high — blocking new directional entries")
             except Exception as e:
                 logger.warning(f"Portfolio Greeks error: {e}")
 

@@ -229,6 +229,21 @@ def run(paper=True):
         return
 
     executed = set()
+    # Skip trades already marked as entered from previous runs
+    for t in trades:
+        if t.get("_entered") or t.get("_rejected"):
+            executed.add(t["symbol"])
+    # Pre-populate executed from live positions to prevent double-entry
+    if not paper:
+        try:
+            live_pos = executor.get_live_positions()
+            held_syms = set(p['underlying'] for p in live_pos)
+            for t in trades:
+                if t['symbol'] in held_syms:
+                    executed.add(t['symbol'])
+                    logger.info(f"ALREADY HELD: {t['symbol']} - skipping entry")
+        except Exception as e:
+            logger.warning(f"Position check failed: {e}")
     cycle = 0
     midday_done = False
 
@@ -290,6 +305,20 @@ def run(paper=True):
                 csym = contracts[0].get("symbol", "")
                 direction = trade["direction"]
 
+                # Check cash before entry
+                try:
+                    if not paper:
+                        _summ = executor.get_live_summary()
+                        if _summ:
+                            _cash = _summ.get("cash", 0)
+                            _cost = trade.get("strategy", {}).get("total_cost", 500)
+                            if _cost > _cash:
+                                logger.warning(f"SKIP {sym}: cost ${_cost:.0f} > cash ${_cash:.0f}")
+                                trade["_rejected"] = True
+                                continue
+                except Exception:
+                    pass
+
                 should_buy, limit, reason = smart.should_enter(
                     sym, direction, csym
                 )
@@ -327,6 +356,17 @@ def run(paper=True):
                     if result.get("status") in ("SUBMITTED", "FILLED"):
                         executed.add(sym)
                         logger.info(f"ENTERED: {sym}")
+                    # Mark trade as entered in the file so restarts don't re-enter
+                    trade["_entered"] = True
+                    trade["_entered_time"] = str(_dt.datetime.now())
+                    try:
+                        _tf = json.load(open("config/aggressive_trades.json"))
+                        for _t in _tf.get("trades", []):
+                            if _t.get("symbol") == sym:
+                                _t["_entered"] = True
+                        json.dump(_tf, open("config/aggressive_trades.json", "w"), indent=2, default=str)
+                    except Exception:
+                        pass
                     # Place GTC stop at broker level
                     try:
                         if not paper:
@@ -342,7 +382,10 @@ def run(paper=True):
                                     bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
                     except Exception as e:
                         logger.warning(f"Bracket stop error: {e}")
-                    else:
+                    if result.get("status") == "SUBMITTED":
+                        logger.info(f"SUBMITTED {sym}: order placed, awaiting fill")
+                        executed.add(sym)
+                    elif result.get("status") not in ("FILLED", "SUBMITTED"):
                         logger.warning(f"FAILED {sym}: {result}")
                         trade["_rejected"] = True
 
@@ -475,8 +518,14 @@ def run(paper=True):
 
                 if long_legs and short_legs:
                     # DEBIT SPREAD: long + short on same underlying
-                    total_entry = sum(abs(p["avg_price"]) * abs(p["qty"]) * 100 for p in positions)
-                    total_mkt = sum(p["market_value"] for p in positions)
+                    # Calendar/spread entry cost = NET debit (not sum of both legs)
+                    long_cost = sum(abs(p["avg_price"]) * abs(p["qty"]) * 100 for p in long_legs)
+                    short_credit = sum(abs(p["avg_price"]) * abs(p["qty"]) * 100 for p in short_legs)
+                    total_entry = abs(long_cost - short_credit)  # Net debit paid
+                    if total_entry < 10:
+                        total_entry = 100  # Minimum to avoid div-by-zero
+                    # Net market value (long - short)
+                    total_mkt = sum(p["market_value"] for p in positions)  # Short legs are already negative
                     current_total = abs(total_mkt)
 
                     legs = []
@@ -485,9 +534,26 @@ def run(paper=True):
                     for p in short_legs:
                         legs.append({"symbol": p["symbol"], "leg": "SHORT", "qty": abs(p["qty"])})
 
+                    # Detect calendar vs debit spread
+                    is_calendar = False
+                    if long_legs and short_legs:
+                        # Calendar = same strike, different expiration
+                        # Debit spread = same expiration, different strike
+                        long_sym = long_legs[0]["symbol"]
+                        short_sym = short_legs[0]["symbol"]
+                        # Option symbols: AAPL  260417C00150000
+                        # Strike is last 8 chars, expiry is chars 6-12
+                        try:
+                            long_strike = long_sym[-8:]
+                            short_strike = short_sym[-8:]
+                            if long_strike == short_strike:
+                                is_calendar = True
+                        except Exception:
+                            pass
+                    spread_type = "CALENDAR_SPREAD" if is_calendar else "DEBIT_SPREAD"
                     pos_for_exit = {
                         "underlying": sym,
-                        "strategy_type": "DEBIT_SPREAD",
+                        "strategy_type": spread_type,
                         "entry_cost": total_entry,
                         "legs": legs,
                         "entry_date": "",
@@ -497,6 +563,12 @@ def run(paper=True):
                     if should_exit:
                         result = executor.close_position_live(pos_for_exit)
                         logger.info(f"LIVE EXIT SPREAD: {sym} {reason} -> {result.get('status')}")
+                        if result.get("status") == "REJECTED":
+                            # Don't retry for 10 minutes
+                            import datetime as _dtmod
+                            if not hasattr(run, '_exit_cooldowns'):
+                                run._exit_cooldowns = {}
+                            run._exit_cooldowns[sym] = _dtmod.datetime.now()
                         if result.get("status") == "FILLED":
                                 acct_mgr.record_trade(sym, "SPREAD", "DEBIT_SPREAD", total_entry, current_total, current_total - total_entry)
 
@@ -528,7 +600,7 @@ def run(paper=True):
                             logger.info(f"LIVE EXIT: {sym} {reason} -> {result.get('status')}")
 
                     # Also check Greeks for naked longs still holding
-                    if not should_exit and stype == "NAKED_LONG":
+                    if not should_exit and pos_for_exit.get("strategy_type","") == "NAKED_LONG":
                         try:
                             greeks = greeks_monitor.get_option_greeks(lp["symbol"])
                             if greeks:

@@ -112,7 +112,9 @@ class ExitManager:
         # Partial exit signal at T1
         if pnl_pct >= profit_t1 and not pos.get("t1_hit"):
             pos["t1_hit"] = True
-            logger.info(f"  T1 HIT: {pos.get('underlying','?')} +{pnl_pct:.0%} - consider scaling out")
+            if not pos.get("_t1_alerted"):
+                logger.info(f"  T1 HIT: {pos.get('underlying','?')} +{pnl_pct:.0%} - consider scaling out")
+                pos["_t1_alerted"] = True
 
         return False, "hold"
 

@@ -97,7 +97,9 @@
         "opening_pct": 80.7
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "OXY",
@@ -183,7 +185,9 @@
         "opening_pct": 46.6
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "BABA",
@@ -280,7 +284,9 @@
         "opening_pct": 23.1
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "ANET",
@@ -377,7 +383,9 @@
         "opening_pct": 29.2
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "MARA",
@@ -474,7 +482,9 @@
         "opening_pct": 25.1
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "W",
@@ -571,7 +581,9 @@
         "opening_pct": 74.2
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "AA",
@@ -668,7 +680,9 @@
         "opening_pct": 53.8
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     },
     {
       "symbol": "BYND",
@@ -765,7 +779,9 @@
         "opening_pct": 42.7
       },
       "entry_price": 0,
-      "max_hold_days": 30
+      "max_hold_days": 30,
+      "_entered": true,
+      "_entered_time": "2026-03-31T10:15:00"
     }
   ],
   "total_cost": 1459.5,
