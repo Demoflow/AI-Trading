@@ -124,6 +124,7 @@ class EVCalculator:
 
         # IV rank adjustment
         iv_adjust = 0
+        iv_rank = iv_rank.get('iv_rank', 50) if isinstance(iv_rank, dict) else iv_rank
         if iv_rank < 30:
             if stype == "NAKED_LONG":
                 iv_adjust = 0.03  # Cheap options, good for longs

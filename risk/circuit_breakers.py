@@ -38,7 +38,7 @@ class IndependentCircuitBreakers:
 
         if self.state.get("halted"):
             hu = self.state.get("halt_until")
-            if hu and date.today().isoformat() >= hu:
+            if hu and date.today() > date.fromisoformat(hu):
                 self.state["halted"] = False
                 self.state["halt_reason"] = None
             else:

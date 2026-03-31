@@ -248,7 +248,8 @@ class AggressiveScanner:
 
                 iv_rank = 50
                 if self.analyzer.iv_analyzer:
-                    iv_rank = self.analyzer.iv_analyzer.get_iv_rank(sym)
+                    _iv_data = self.analyzer.iv_analyzer.get_iv_rank(sym)
+                    iv_rank = _iv_data.get('iv_rank', 50) if isinstance(_iv_data, dict) else _iv_data
 
                 days_to_cat = 999
                 try:

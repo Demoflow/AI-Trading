@@ -41,26 +41,6 @@ class StrategyEngine:
             return None
 
         put_map = chain_data.get("putExpDateMap", {})
-        # Vol regime enforcement (Perplexity fix #3)
-        # Penalize strategies that conflict with VIX regime
-        try:
-            from aggressive.vol_strategy import VolatilityStrategySelector
-            import time as _t
-            vix_q = self.client.get_quote("$VIX") if hasattr(self, 'client') else None
-            vix = vix_q.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20) if vix_q and vix_q.status_code == 200 else 20
-            vol_regime = VolatilityStrategySelector.get_regime(vix)
-            avoid = vol_regime.get("avoid_strategies", [])
-            preferred = vol_regime.get("preferred_strategies", [])
-            for s in strategies:
-                stype = s.get("type", "")
-                if stype in avoid:
-                    s["score"] = max(0, s.get("score", 0) - 25)  # Heavy penalty
-                    s["vol_regime_penalty"] = -25
-                elif stype in preferred:
-                    s["score"] = s.get("score", 0) + 15  # Boost preferred
-                    s["vol_regime_penalty"] = 15
-        except Exception:
-            pass
 
         best = None
         best_score = -999
@@ -359,6 +339,26 @@ class StrategyEngine:
             return None
 
         strategies.sort(key=lambda x: x["score"], reverse=True)
+
+        # Vol regime enforcement — penalize strategies that conflict with VIX
+        try:
+            from aggressive.vol_strategy import VolatilityStrategySelector
+            vix_q = self.client.get_quote('$VIX') if hasattr(self, 'client') else None
+            vix = vix_q.json().get('$VIX', {}).get('quote', {}).get('lastPrice', 20) if vix_q and vix_q.status_code == 200 else 20
+            vol_regime = VolatilityStrategySelector.get_regime(vix)
+            avoid = vol_regime.get('avoid_strategies', [])
+            preferred = vol_regime.get('preferred_strategies', [])
+            for s in strategies:
+                stype = s.get('type', '')
+                if stype in avoid:
+                    s['score'] = max(0, s.get('score', 0) - 25)
+                elif stype in preferred:
+                    s['score'] = s.get('score', 0) + 15
+            # Re-sort after penalty
+            strategies.sort(key=lambda x: x.get('score', 0), reverse=True)
+        except Exception:
+            pass
+
         best = strategies[0]
 
         # Check for dual-strategy opportunity

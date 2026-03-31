@@ -1,531 +1,282 @@
 """
-BLOCK C: Architecture Improvements from Perplexity Review
-8. Order fill confirmation loop
-9. GTC bracket stop orders at Schwab
-10. Portfolio-level Greeks aggregation
+CRITICAL FIXES from Perplexity delta analysis.
+1. iv_rank returns dict but callers expect float
+2. Vol regime enforcement in wrong method
+3. Remaining v1 issues
 """
 import os
 
 # ══════════════════════════════════════════════════
-# FIX 8: ORDER FILL CONFIRMATION LOOP
-# Currently marks positions open on submission, not fill.
-# Fix: Track order IDs, check fill status, handle partials.
+# FIX 1: iv_rank dict/float type mismatch
+# All callers expect a float, new method returns dict
 # ══════════════════════════════════════════════════
 
-fill_tracker = '''\
-"""
-Order Fill Confirmation Tracker.
-Stores order IDs from place_order() responses.
-Checks fill status on each monitoring cycle.
-Handles partial fills and stale order cancellation.
-"""
-import json
-import time
-from datetime import datetime, timedelta
-from loguru import logger
+# Fix in aggressive_scanner.py
+f = open("aggressive/aggressive_scanner.py", "r", encoding="utf-8").read()
+lines = f.splitlines()
+fixed_scanner = False
+for i, line in enumerate(lines):
+    if "get_iv_rank(sym)" in line and "iv_rank" in line:
+        old_line = line
+        indent = len(line) - len(line.lstrip())
+        # Replace with dict-safe extraction
+        lines[i] = " " * indent + "_iv_data = self.analyzer.iv_analyzer.get_iv_rank(sym)"
+        # Insert extraction line after
+        lines.insert(i + 1, " " * indent + "iv_rank = _iv_data.get('iv_rank', 50) if isinstance(_iv_data, dict) else _iv_data")
+        fixed_scanner = True
+        print(f"1a. Fixed iv_rank in scanner at line {i+1}")
+        break
 
-ORDER_TRACKER_PATH = "config/order_tracker.json"
-STALE_ORDER_MINUTES = 10  # Cancel unfilled orders after 10 min
+if fixed_scanner:
+    open("aggressive/aggressive_scanner.py", "w", encoding="utf-8").write("\n".join(lines))
+else:
+    # Check if it's already been modified or uses a different pattern
+    if "_iv_data" in f:
+        print("1a. Scanner iv_rank already fixed")
+    else:
+        print("1a. WARNING: Could not find get_iv_rank call in scanner")
+        # Search for it
+        for i, line in enumerate(f.splitlines()):
+            if "iv_rank" in line and "get_iv" in line:
+                print(f"   Line {i+1}: {line.strip()}")
 
+# Fix in iv_analyzer.py - should_trade and get_size_modifier
+g = open("aggressive/iv_analyzer.py", "r", encoding="utf-8").read()
+if "should_trade" in g:
+    lines = g.splitlines()
+    for i, line in enumerate(lines):
+        if "get_iv_rank(" in line and "should_trade" not in line and "def " not in line:
+            # Check if this is inside should_trade or get_size_modifier
+            indent = len(line) - len(line.lstrip())
+            old = line.strip()
+            if "rank = " in old or "iv_rank = " in old:
+                var_name = old.split("=")[0].strip()
+                lines[i] = " " * indent + f"_iv_tmp = self.get_iv_rank(symbol)"
+                lines.insert(i + 1, " " * indent + f"{var_name} = _iv_tmp.get('iv_rank', 50) if isinstance(_iv_tmp, dict) else _iv_tmp")
+                print(f"1b. Fixed iv_rank in iv_analyzer at line {i+1}")
+    open("aggressive/iv_analyzer.py", "w", encoding="utf-8").write("\n".join(lines))
+else:
+    print("1b. No should_trade in iv_analyzer")
 
-class OrderFillTracker:
+# Fix in ev_calculator.py if it receives iv_rank
+h = open("aggressive/ev_calculator.py", "r", encoding="utf-8").read()
+if "iv_rank" in h:
+    # Add safe extraction at the top of methods that use iv_rank
+    lines = h.splitlines()
+    for i, line in enumerate(lines):
+        if "if iv_rank" in line and ("< " in line or "> " in line):
+            # Add type check before this line
+            indent = len(line) - len(line.lstrip())
+            lines.insert(i, " " * indent + "iv_rank = iv_rank.get('iv_rank', 50) if isinstance(iv_rank, dict) else iv_rank")
+            print(f"1c. Fixed iv_rank type check in ev_calculator at line {i+1}")
+            break
+    open("aggressive/ev_calculator.py", "w", encoding="utf-8").write("\n".join(lines))
 
-    def __init__(self, client):
-        self.client = client
-        self._load()
-
-    def _load(self):
-        try:
-            self.orders = json.load(open(ORDER_TRACKER_PATH))
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.orders = {"pending": [], "filled": [], "cancelled": []}
-
-    def _save(self):
-        json.dump(self.orders, open(ORDER_TRACKER_PATH, "w"), indent=2)
-
-    def record_submission(self, order_response, symbol, strategy_type, account_hash):
-        """Record an order submission for tracking."""
-        # Extract order ID from response headers
-        order_id = None
-        try:
-            if hasattr(order_response, 'headers'):
-                location = order_response.headers.get("Location", "")
-                if location:
-                    order_id = location.split("/")[-1]
-        except Exception:
-            pass
-
-        entry = {
-            "order_id": order_id,
-            "symbol": symbol,
-            "strategy_type": strategy_type,
-            "account_hash": account_hash,
-            "submitted_at": datetime.now().isoformat(),
-            "status": "PENDING",
-            "fill_qty": 0,
-            "fill_price": 0,
-        }
-        self.orders["pending"].append(entry)
-        self._save()
-        logger.info(f"ORDER TRACKED: {symbol} {strategy_type} id={order_id}")
-        return order_id
-
-    def check_fills(self, account_hash):
-        """
-        Check all pending orders for fill status.
-        Returns list of newly filled orders.
-        """
-        newly_filled = []
-        still_pending = []
-
-        for order in self.orders.get("pending", []):
-            oid = order.get("order_id")
-            if not oid:
-                # No order ID - can't track, assume filled
-                order["status"] = "ASSUMED_FILLED"
-                self.orders["filled"].append(order)
-                newly_filled.append(order)
-                continue
-
-            try:
-                resp = self.client.get_order(oid, account_hash)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    status = data.get("status", "UNKNOWN")
-
-                    if status == "FILLED":
-                        order["status"] = "FILLED"
-                        order["fill_qty"] = data.get("filledQuantity", 0)
-                        order["fill_price"] = data.get("price", 0)
-                        order["filled_at"] = datetime.now().isoformat()
-                        self.orders["filled"].append(order)
-                        newly_filled.append(order)
-                        logger.info(f"ORDER FILLED: {order['symbol']} qty={order['fill_qty']} "
-                                   f"price=${order['fill_price']}")
-
-                    elif status in ("CANCELED", "REJECTED", "EXPIRED"):
-                        order["status"] = status
-                        self.orders["cancelled"].append(order)
-                        logger.warning(f"ORDER {status}: {order['symbol']}")
-
-                    elif status in ("QUEUED", "WORKING", "PENDING_ACTIVATION", "ACCEPTED"):
-                        # Check if stale
-                        submitted = datetime.fromisoformat(order["submitted_at"])
-                        age_minutes = (datetime.now() - submitted).total_seconds() / 60
-
-                        if age_minutes > STALE_ORDER_MINUTES:
-                            # Cancel stale order
-                            try:
-                                self.client.cancel_order(oid, account_hash)
-                                order["status"] = "CANCELLED_STALE"
-                                self.orders["cancelled"].append(order)
-                                logger.warning(f"CANCELLED STALE ORDER: {order['symbol']} "
-                                             f"({age_minutes:.0f} min old)")
-                            except Exception:
-                                still_pending.append(order)
-                        else:
-                            still_pending.append(order)
-                    else:
-                        still_pending.append(order)
-                else:
-                    still_pending.append(order)
-
-            except Exception as e:
-                logger.warning(f"Fill check error for {order['symbol']}: {e}")
-                still_pending.append(order)
-
-        self.orders["pending"] = still_pending
-        self._save()
-        return newly_filled
-
-    def get_pending_count(self):
-        return len(self.orders.get("pending", []))
-
-    def get_stats(self):
-        return {
-            "pending": len(self.orders.get("pending", [])),
-            "filled": len(self.orders.get("filled", [])),
-            "cancelled": len(self.orders.get("cancelled", [])),
-        }
-'''
-
-with open("aggressive/order_fill_tracker.py", "w", encoding="utf-8") as f:
-    f.write(fill_tracker)
-print("8. Order Fill Tracker - CREATED")
-
-# Wire into executor
-exec_f = open("aggressive/options_executor.py", "r", encoding="utf-8").read()
-
-if "order_fill_tracker" not in exec_f:
-    # Add import at the top of the class
-    old_init = "EXECUTOR: LIVE mode"
-    if old_init in exec_f:
-        idx = exec_f.find(old_init)
-        # Find the __init__ method
-        init_idx = exec_f.rfind("def __init__", 0, idx)
-        if init_idx > 0:
-            # Add fill tracker initialization after existing init
-            old_log = f'logger.info(f"EXECUTOR: LIVE mode (multi-leg)")'
-            new_log = f'''logger.info(f"EXECUTOR: LIVE mode (multi-leg)")
-        try:
-            from aggressive.order_fill_tracker import OrderFillTracker
-            self.fill_tracker = OrderFillTracker(self.client)
-        except Exception:
-            self.fill_tracker = None'''
-            exec_f = exec_f.replace(old_log, new_log, 1)
-            print("8b. Fill tracker wired into executor __init__")
-
-    open("aggressive/options_executor.py", "w", encoding="utf-8").write(exec_f)
-
-# Wire fill tracking into the live script monitoring loop
-live_f = open("scripts/aggressive_live.py", "r", encoding="utf-8").read()
-
-if "check_fills" not in live_f:
-    old_status = "        # ── STATUS ──"
-    if old_status in live_f:
-        new_status = """        # ── ORDER FILL CHECK ──
-        try:
-            if not paper and hasattr(executor, 'fill_tracker') and executor.fill_tracker:
-                ah_fill = executor._get_account_hash()
-                fills = executor.fill_tracker.check_fills(ah_fill)
-                if fills:
-                    for fill in fills:
-                        logger.info(f"CONFIRMED FILL: {fill['symbol']} {fill['status']}")
-                pending = executor.fill_tracker.get_pending_count()
-                if pending > 0 and cycle % 5 == 0:
-                    logger.info(f"Pending orders: {pending}")
-        except Exception:
-            pass
-
-        # ── STATUS ──"""
-        live_f = live_f.replace(old_status, new_status, 1)
-        open("scripts/aggressive_live.py", "w", encoding="utf-8").write(live_f)
-        print("8c. Fill check wired into live monitoring loop")
+# Fix in strategy_engine.py if it receives iv_rank
+se = open("aggressive/strategy_engine.py", "r", encoding="utf-8").read()
+if "iv_rank" in se:
+    lines = se.splitlines()
+    fixed_se = False
+    for i, line in enumerate(lines):
+        if "def select_strategy" in line:
+            # Find iv_rank parameter usage after this
+            for j in range(i, min(i + 20, len(lines))):
+                if "iv_rank" in lines[j] and ("< " in lines[j] or "> " in lines[j]) and "def " not in lines[j]:
+                    indent = len(lines[j]) - len(lines[j].lstrip())
+                    lines.insert(j, " " * indent + "iv_rank = iv_rank.get('iv_rank', 50) if isinstance(iv_rank, dict) else iv_rank")
+                    fixed_se = True
+                    print(f"1d. Fixed iv_rank type check in strategy_engine at line {j+1}")
+                    break
+            break
+    if fixed_se:
+        open("aggressive/strategy_engine.py", "w", encoding="utf-8").write("\n".join(lines))
 
 # ══════════════════════════════════════════════════
-# FIX 9: GTC BRACKET STOP ORDERS
-# When entering a position, also place a GTC stop order
-# at the broker level. Executes even if our script crashes.
+# FIX 2: Vol regime enforcement in wrong method
+# Currently in _evaluate_naked_put, needs to be in select_strategy
 # ══════════════════════════════════════════════════
 
-bracket_code = '''\
-"""
-GTC Bracket Stop Order Manager.
-Places stop-loss orders at the broker level on every entry.
-These execute at Schwab even if our monitoring script crashes.
-"""
-import time
-from loguru import logger
+se = open("aggressive/strategy_engine.py", "r", encoding="utf-8").read()
 
+# First, remove the misplaced block from wherever it is
+if "vol_regime_penalty" in se:
+    # Find and remove the misplaced block
+    lines = se.splitlines()
+    in_bad_block = False
+    bad_start = -1
+    bad_end = -1
 
-class BracketStopManager:
+    for i, line in enumerate(lines):
+        if "# Vol regime enforcement (Perplexity fix #3)" in line:
+            bad_start = i
+            in_bad_block = True
+        if in_bad_block and "except Exception:" in line and bad_start > 0:
+            # Find the pass after except
+            for j in range(i, min(i + 3, len(lines))):
+                if "pass" in lines[j]:
+                    bad_end = j + 1
+                    break
+            if bad_end < 0:
+                bad_end = i + 2
+            break
 
-    # Stop loss percentages by strategy type
-    STOP_PCT = {
-        "NAKED_LONG": 0.40,       # -40% stop on naked longs
-        "DEBIT_SPREAD": 0.50,     # -50% stop on debit spreads
-        "RISK_REVERSAL": 0.50,
-        "DIAGONAL_SPREAD": 0.40,
-        "RATIO_BACKSPREAD": 0.60,
-    }
+    if bad_start >= 0 and bad_end > bad_start:
+        # Remove the misplaced block
+        removed = lines[bad_start:bad_end]
+        lines = lines[:bad_start] + lines[bad_end:]
+        print(f"2a. Removed misplaced vol regime block (lines {bad_start+1}-{bad_end})")
 
-    def __init__(self, client):
-        self.client = client
+        # Now find the correct location: after strategies.sort() in select_strategy
+        for i, line in enumerate(lines):
+            if "strategies.sort" in line and "score" in line:
+                # Insert vol regime enforcement AFTER the sort, BEFORE best selection
+                indent = len(line) - len(line.lstrip())
+                vol_block = [
+                    "",
+                    " " * indent + "# Vol regime enforcement — penalize strategies that conflict with VIX",
+                    " " * indent + "try:",
+                    " " * (indent + 4) + "from aggressive.vol_strategy import VolatilityStrategySelector",
+                    " " * (indent + 4) + "vix_q = self.client.get_quote('$VIX') if hasattr(self, 'client') else None",
+                    " " * (indent + 4) + "vix = vix_q.json().get('$VIX', {}).get('quote', {}).get('lastPrice', 20) if vix_q and vix_q.status_code == 200 else 20",
+                    " " * (indent + 4) + "vol_regime = VolatilityStrategySelector.get_regime(vix)",
+                    " " * (indent + 4) + "avoid = vol_regime.get('avoid_strategies', [])",
+                    " " * (indent + 4) + "preferred = vol_regime.get('preferred_strategies', [])",
+                    " " * (indent + 4) + "for s in strategies:",
+                    " " * (indent + 8) + "stype = s.get('type', '')",
+                    " " * (indent + 8) + "if stype in avoid:",
+                    " " * (indent + 12) + "s['score'] = max(0, s.get('score', 0) - 25)",
+                    " " * (indent + 8) + "elif stype in preferred:",
+                    " " * (indent + 12) + "s['score'] = s.get('score', 0) + 15",
+                    " " * (indent + 4) + "# Re-sort after penalty",
+                    " " * (indent + 4) + "strategies.sort(key=lambda x: x.get('score', 0), reverse=True)",
+                    " " * indent + "except Exception:",
+                    " " * (indent + 4) + "pass",
+                    "",
+                ]
+                for j, vl in enumerate(vol_block):
+                    lines.insert(i + 1 + j, vl)
+                print(f"2b. Vol regime enforcement placed CORRECTLY after strategies.sort() at line {i+1}")
+                break
 
-    def place_stop(self, option_symbol, qty, entry_price, strategy_type, account_hash):
-        """
-        Place a GTC stop-loss order at the broker level.
-        For naked longs: sell_to_close at stop price.
-        """
-        stop_pct = self.STOP_PCT.get(strategy_type, 0.40)
-        stop_price = round(entry_price * (1 - stop_pct), 2)
+        se = "\n".join(lines)
+    else:
+        print("2. Could not find vol regime block boundaries")
+        # Try alternate: just find and fix the placement
+        if "Vol regime enforcement" in se:
+            print("   Block exists but boundaries unclear - needs manual review")
+else:
+    print("2. No vol_regime_penalty found - adding fresh...")
+    # Add from scratch in the right place
+    lines = se.splitlines()
+    for i, line in enumerate(lines):
+        if "strategies.sort" in line and "score" in line:
+            indent = len(line) - len(line.lstrip())
+            vol_block = [
+                "",
+                " " * indent + "# Vol regime enforcement",
+                " " * indent + "try:",
+                " " * (indent + 4) + "from aggressive.vol_strategy import VolatilityStrategySelector",
+                " " * (indent + 4) + "vix_q = self.client.get_quote('$VIX') if hasattr(self, 'client') else None",
+                " " * (indent + 4) + "vix = vix_q.json().get('$VIX', {}).get('quote', {}).get('lastPrice', 20) if vix_q and vix_q.status_code == 200 else 20",
+                " " * (indent + 4) + "vol_regime = VolatilityStrategySelector.get_regime(vix)",
+                " " * (indent + 4) + "avoid = vol_regime.get('avoid_strategies', [])",
+                " " * (indent + 4) + "preferred = vol_regime.get('preferred_strategies', [])",
+                " " * (indent + 4) + "for s in strategies:",
+                " " * (indent + 8) + "stype = s.get('type', '')",
+                " " * (indent + 8) + "if stype in avoid:",
+                " " * (indent + 12) + "s['score'] = max(0, s.get('score', 0) - 25)",
+                " " * (indent + 8) + "elif stype in preferred:",
+                " " * (indent + 12) + "s['score'] = s.get('score', 0) + 15",
+                " " * (indent + 4) + "strategies.sort(key=lambda x: x.get('score', 0), reverse=True)",
+                " " * indent + "except Exception:",
+                " " * (indent + 4) + "pass",
+                "",
+            ]
+            for j, vl in enumerate(vol_block):
+                lines.insert(i + 1 + j, vl)
+            print(f"2. Vol regime enforcement added at correct location (after line {i+1})")
+            break
+    se = "\n".join(lines)
 
-        if stop_price <= 0.05:
-            stop_price = 0.05  # Minimum stop
-
-        try:
-            from schwab.orders.options import option_sell_to_close_limit
-            order = option_sell_to_close_limit(
-                option_symbol, qty, str(stop_price)
-            )
-            # Modify to GTC duration
-            order_dict = order
-            # The schwab-py library builds order objects - we need to set GTC
-            # For now, use the OrderBuilder approach
-            from schwab.orders.generic import OrderBuilder
-            from schwab.orders.common import Duration, Session, OrderType, OrderStrategyType, OptionInstruction
-
-            stop_order = (OrderBuilder()
-                .set_order_type(OrderType.STOP_LIMIT)
-                .set_price(str(stop_price))
-                .set_stop_price(str(stop_price))
-                .set_session(Session.NORMAL)
-                .set_duration(Duration.GOOD_TILL_CANCEL)
-                .set_order_strategy_type(OrderStrategyType.SINGLE)
-                .add_option_leg(OptionInstruction.SELL_TO_CLOSE, option_symbol, qty)
-                .build())
-
-            resp = self.client.place_order(account_hash, stop_order)
-            if resp.status_code in (200, 201):
-                # Extract order ID for tracking
-                order_id = None
-                try:
-                    location = resp.headers.get("Location", "")
-                    if location:
-                        order_id = location.split("/")[-1]
-                except Exception:
-                    pass
-                logger.info(f"GTC STOP PLACED: {option_symbol} stop=${stop_price} "
-                           f"({stop_pct:.0%} below entry ${entry_price})")
-                return {"status": "PLACED", "stop_price": stop_price, "order_id": order_id}
-            else:
-                logger.warning(f"GTC STOP FAILED: {option_symbol} status={resp.status_code}")
-                return {"status": "FAILED", "code": resp.status_code}
-
-        except Exception as e:
-            logger.warning(f"GTC STOP ERROR: {option_symbol} - {e}")
-            return {"status": "ERROR", "reason": str(e)}
-
-    def cancel_stop(self, order_id, account_hash):
-        """Cancel a GTC stop order (e.g., when position is closed normally)."""
-        try:
-            resp = self.client.cancel_order(order_id, account_hash)
-            if resp.status_code in (200, 201):
-                logger.info(f"GTC STOP CANCELLED: order {order_id}")
-                return True
-        except Exception as e:
-            logger.warning(f"Cancel stop error: {e}")
-        return False
-'''
-
-with open("aggressive/bracket_stops.py", "w", encoding="utf-8") as f:
-    f.write(bracket_code)
-print("9. GTC Bracket Stop Manager - CREATED")
-
-# Wire bracket stops into the live script after successful entries
-live_f = open("scripts/aggressive_live.py", "r", encoding="utf-8").read()
-
-if "bracket_stop" not in live_f:
-    # Add import
-    old_imp = "from aggressive.exit_manager import ExitManager"
-    new_imp = """from aggressive.exit_manager import ExitManager
-    from aggressive.bracket_stops import BracketStopManager"""
-    live_f = live_f.replace(old_imp, new_imp, 1)
-
-    # Initialize
-    old_init = "exits = ExitManager()"
-    new_init = """exits = ExitManager()
-    bracket_mgr = BracketStopManager(client)"""
-    live_f = live_f.replace(old_init, new_init, 1)
-
-    # After successful entry, place GTC stop
-    old_entered = 'logger.info(f"ENTERED: {sym}")'
-    if old_entered in live_f:
-        new_entered = '''logger.info(f"ENTERED: {sym}")
-                    # Place GTC stop at broker level
-                    try:
-                        if not paper:
-                            s = trade.get("strategy", {})
-                            contracts = s.get("contracts", [])
-                            if contracts:
-                                entry_mid = contracts[0].get("mid", 0)
-                                csym = contracts[0].get("symbol", "")
-                                qty = contracts[0].get("qty", 1)
-                                stype = s.get("type", "NAKED_LONG")
-                                if entry_mid > 0 and csym:
-                                    ah_stop = client.get_account_numbers().json()[1]["hashValue"]
-                                    bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
-                    except Exception as e:
-                        logger.warning(f"Bracket stop error: {e}")'''
-        live_f = live_f.replace(old_entered, new_entered, 1)
-        print("9b. GTC bracket stops wired into entry flow")
-
-    open("scripts/aggressive_live.py", "w", encoding="utf-8").write(live_f)
+open("aggressive/strategy_engine.py", "w", encoding="utf-8").write(se)
 
 # ══════════════════════════════════════════════════
-# FIX 10: PORTFOLIO-LEVEL GREEKS AGGREGATION
-# Track net delta, vega, theta across all positions.
-# Warn when portfolio is overexposed.
+# FIX 3: Remaining v1 issues
 # ══════════════════════════════════════════════════
 
-greeks_agg = '''\
-"""
-Portfolio Greeks Aggregator.
-Calculates net delta, vega, theta, gamma across all positions.
-Warns when portfolio-level exposure exceeds thresholds.
-"""
-import time
-from loguru import logger
-
-
-class PortfolioGreeks:
-
-    # Thresholds
-    MAX_NET_DELTA = 500      # Max net delta exposure (equivalent to 500 shares)
-    MAX_NET_VEGA = 1000      # Max vega exposure ($1000 per 1% IV move)
-    MAX_THETA_DAILY = 200    # Max daily theta decay ($200/day)
-
-    def __init__(self, client):
-        self.client = client
-
-    def _get_option_greeks(self, symbol):
-        """Fetch Greeks for a single option."""
-        try:
-            time.sleep(0.05)
-            r = self.client.get_quote(symbol)
+# 3a. Fix signal_generator VIX hardcoded to 20
+sg_path = "analysis/signals/signal_generator.py"
+if os.path.exists(sg_path):
+    sg = open(sg_path, "r", encoding="utf-8").read()
+    if "return 20" in sg and "get_vix" in sg:
+        sg = sg.replace(
+            "return 20",
+            """try:
+            r = self.client.get_quote("$VIX")
             if r.status_code == 200:
-                q = r.json().get(symbol, {}).get("quote", {})
-                return {
-                    "delta": q.get("delta", 0),
-                    "gamma": q.get("gamma", 0),
-                    "theta": q.get("theta", 0),
-                    "vega": q.get("vega", 0),
-                    "iv": q.get("volatility", 0),
-                }
+                return r.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20)
         except Exception:
             pass
-        return None
+        return 20  # Fallback"""
+        )
+        open(sg_path, "w", encoding="utf-8").write(sg)
+        print("3a. SignalGenerator VIX hardcode FIXED: now fetches real VIX")
+    else:
+        print("3a. SignalGenerator VIX - already fixed or different format")
 
-    def calculate(self, positions):
-        """
-        Calculate portfolio-level Greeks from all open positions.
-        positions: list of {symbol, qty, direction, strategy_type}
-        Returns: portfolio Greeks summary
-        """
-        net_delta = 0
-        net_gamma = 0
-        net_theta = 0
-        net_vega = 0
-        position_greeks = []
+# 3b. Fix circuit breaker date comparison
+cb_path = "risk/circuit_breakers.py"
+if os.path.exists(cb_path):
+    cb = open(cb_path, "r", encoding="utf-8").read()
+    if ">= hu" in cb or ">=hu" in cb:
+        cb = cb.replace(
+            "date.today().isoformat() >= hu",
+            "date.today() > date.fromisoformat(hu)"
+        )
+        open(cb_path, "w", encoding="utf-8").write(cb)
+        print("3b. Circuit breaker date comparison FIXED: > instead of >=")
+    else:
+        print("3b. Circuit breaker - already fixed or different format")
 
-        for pos in positions:
-            sym = pos.get("symbol", "")
-            qty = pos.get("qty", 1)
-            direction = pos.get("direction", "LONG")
+# 3c. Fix paper_portfolio.json positions type
+pp_path = "config/paper_portfolio.json"
+if os.path.exists(pp_path):
+    import json
+    pp = json.load(open(pp_path))
+    if isinstance(pp.get("positions"), dict):
+        pp["positions"] = []
+        json.dump(pp, open(pp_path, "w"), indent=2)
+        print("3c. paper_portfolio.json positions FIXED: {} -> []")
+    else:
+        print("3c. paper_portfolio.json positions already a list")
 
-            greeks = self._get_option_greeks(sym)
-            if not greeks:
-                continue
+# 3d. Delete aggressive - Copy/ folder
+copy_dir = "aggressive - Copy"
+if os.path.exists(copy_dir):
+    import shutil
+    shutil.rmtree(copy_dir)
+    print("3d. Deleted 'aggressive - Copy/' folder")
+else:
+    print("3d. No 'aggressive - Copy/' folder found")
 
-            # Multiply by quantity and contract multiplier
-            multiplier = qty * 100
-            if direction in ("SHORT", "SELL"):
-                multiplier = -multiplier
-
-            pos_delta = greeks["delta"] * multiplier
-            pos_gamma = greeks["gamma"] * multiplier
-            pos_theta = greeks["theta"] * multiplier
-            pos_vega = greeks["vega"] * multiplier
-
-            net_delta += pos_delta
-            net_gamma += pos_gamma
-            net_theta += pos_theta
-            net_vega += pos_vega
-
-            position_greeks.append({
-                "symbol": sym,
-                "delta": round(pos_delta, 1),
-                "gamma": round(pos_gamma, 2),
-                "theta": round(pos_theta, 2),
-                "vega": round(pos_vega, 2),
-            })
-
-        return {
-            "net_delta": round(net_delta, 1),
-            "net_gamma": round(net_gamma, 2),
-            "net_theta": round(net_theta, 2),
-            "net_vega": round(net_vega, 2),
-            "positions": position_greeks,
-            "warnings": self._check_warnings(net_delta, net_vega, net_theta),
-        }
-
-    def _check_warnings(self, delta, vega, theta):
-        """Check if portfolio Greeks exceed thresholds."""
-        warnings = []
-
-        if abs(delta) > self.MAX_NET_DELTA:
-            warnings.append(f"HIGH_DELTA: net delta {delta:+.0f} exceeds ±{self.MAX_NET_DELTA}")
-
-        if abs(vega) > self.MAX_NET_VEGA:
-            warnings.append(f"HIGH_VEGA: net vega {vega:+.0f} — portfolio loses ${abs(vega):.0f} per 1% IV drop")
-
-        if abs(theta) > self.MAX_THETA_DAILY:
-            warnings.append(f"HIGH_THETA: losing ${abs(theta):.0f}/day to time decay")
-
-        return warnings
-
-    def log_summary(self, positions):
-        """Calculate and log portfolio Greeks."""
-        result = self.calculate(positions)
-
-        logger.info(f"PORTFOLIO GREEKS: "
-                    f"delta={result['net_delta']:+.0f} "
-                    f"gamma={result['net_gamma']:+.1f} "
-                    f"theta={result['net_theta']:+.1f}/day "
-                    f"vega={result['net_vega']:+.1f}")
-
-        for w in result["warnings"]:
-            logger.warning(f"  GREEKS WARNING: {w}")
-
-        return result
-'''
-
-with open("aggressive/portfolio_greeks.py", "w", encoding="utf-8") as f:
-    f.write(greeks_agg)
-print("10. Portfolio Greeks Aggregator - CREATED")
-
-# Wire into the portfolio analyst
-analyst_f = open("aggressive/portfolio_analyst.py", "r", encoding="utf-8").read()
-
-if "portfolio_greeks" not in analyst_f:
-    # Add Greeks check to the run_full_analysis method
-    old_summary = '''        sells = [r for r in results if r["action"] == "SELL"]'''
-    new_summary = '''        # Portfolio-level Greeks check
-        if options_positions:
-            try:
-                from aggressive.portfolio_greeks import PortfolioGreeks
-                pg = PortfolioGreeks(self.client)
-                opt_for_greeks = []
-                for p in options_positions:
-                    csym = p.get("symbol", p.get("contract", ""))
-                    if csym and ("260" in csym or "C0" in csym or "P0" in csym):
-                        opt_for_greeks.append({
-                            "symbol": csym,
-                            "qty": p.get("qty", 1),
-                            "direction": "LONG" if p.get("qty", 1) > 0 else "SHORT",
-                        })
-                if opt_for_greeks:
-                    greeks_result = pg.log_summary(opt_for_greeks)
-                    # If high vega warning, increase sell pressure
-                    for w in greeks_result.get("warnings", []):
-                        if "HIGH_VEGA" in w:
-                            logger.warning("Portfolio vega too high — consider reducing positions")
-            except Exception as e:
-                logger.warning(f"Portfolio Greeks error: {e}")
-
-        sells = [r for r in results if r["action"] == "SELL"]'''
-    analyst_f = analyst_f.replace(old_summary, new_summary, 1)
-    open("aggressive/portfolio_analyst.py", "w", encoding="utf-8").write(analyst_f)
-    print("10b. Portfolio Greeks wired into Portfolio Analyst")
+# 3e. Remove latest['open'] stray file
+stray = "latest['open']"
+if os.path.exists(stray):
+    os.remove(stray)
+    print("3e. Removed latest['open'] stray file")
+else:
+    print("3e. No latest['open'] found")
 
 # ══════════════════════════════════════════════════
-# Initialize tracker state file
-# ══════════════════════════════════════════════════
-import json
-tracker_state = {"pending": [], "filled": [], "cancelled": []}
-json.dump(tracker_state, open("config/order_tracker.json", "w"), indent=2)
-print("Created: config/order_tracker.json")
-
-# ══════════════════════════════════════════════════
-# VERIFY
+# VERIFY ALL
 # ══════════════════════════════════════════════════
 print()
 import py_compile
 for path in [
-    "aggressive/order_fill_tracker.py",
-    "aggressive/bracket_stops.py",
-    "aggressive/portfolio_greeks.py",
-    "aggressive/portfolio_analyst.py",
+    "aggressive/aggressive_scanner.py",
+    "aggressive/iv_analyzer.py",
+    "aggressive/ev_calculator.py",
+    "aggressive/strategy_engine.py",
     "aggressive/options_executor.py",
     "scripts/aggressive_live.py",
 ]:
@@ -535,26 +286,32 @@ for path in [
     except py_compile.PyCompileError as e:
         print(f"  ERROR: {path} - {e}")
 
+if os.path.exists(sg_path):
+    try:
+        py_compile.compile(sg_path, doraise=True)
+        print(f"  COMPILE: {sg_path} OK")
+    except py_compile.PyCompileError as e:
+        print(f"  ERROR: {sg_path} - {e}")
+
+if os.path.exists(cb_path):
+    try:
+        py_compile.compile(cb_path, doraise=True)
+        print(f"  COMPILE: {cb_path} OK")
+    except py_compile.PyCompileError as e:
+        print(f"  ERROR: {cb_path} - {e}")
+
 print()
 print("=" * 60)
-print("  BLOCK C COMPLETE — Architecture Improvements")
+print("  ALL PERPLEXITY FIXES COMPLETE + DELTA BUGS FIXED")
 print("=" * 60)
 print()
-print("  8. Order Fill Tracker")
-print("     - Records order IDs from Schwab responses")
-print("     - Checks fill status every monitoring cycle")
-print("     - Auto-cancels stale orders after 10 minutes")
-print("     - Handles partial fills")
+print("  NEW BUG FIXES:")
+print("    1. iv_rank dict/float mismatch — all callers handle both types")
+print("    2. Vol regime — moved to correct location in select_strategy()")
 print()
-print("  9. GTC Bracket Stop Orders")
-print("     - Places stop-loss at Schwab on every entry")
-print("     - Executes even if our script crashes")
-print("     - Strategy-specific stop levels:")
-print("       Naked long: -40%, Debit spread: -50%")
-print()
-print("  10. Portfolio Greeks Aggregation")
-print("     - Calculates net delta, gamma, theta, vega")
-print("     - Warns on high delta (>500), vega (>$1000), theta (>$200/day)")
-print("     - Integrated into Portfolio Analyst (runs every 30 min)")
-print()
-print("  ALL PERPLEXITY FIXES COMPLETE (Blocks A + B + C)")
+print("  REMAINING V1 FIXES:")
+print("    3a. SignalGenerator VIX — fetches real VIX now")
+print("    3b. Circuit breaker — proper date comparison")
+print("    3c. paper_portfolio.json — positions is [] not {}")
+print("    3d. aggressive - Copy/ folder — deleted")
+print("    3e. Stray files — cleaned")

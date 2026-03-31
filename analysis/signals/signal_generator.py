@@ -50,7 +50,13 @@ class SignalGenerator:
         return df
 
     def get_vix(self):
-        return 20
+        try:
+            r = self.client.get_quote("$VIX")
+            if r.status_code == 200:
+                return r.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20)
+        except Exception:
+            pass
+        return 20  # Fallback
 
     def get_options_chain(self, symbol):
         return None

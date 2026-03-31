@@ -154,14 +154,16 @@ class IVAnalyzer:
     
     def should_trade(self, symbol):
         """Returns (ok, iv_rank, reason)"""
-        rank = self.get_iv_rank(symbol)
+        _iv_tmp = self.get_iv_rank(symbol)
+        rank = _iv_tmp.get('iv_rank', 50) if isinstance(_iv_tmp, dict) else _iv_tmp
         if rank > self.MAX_IV_RANK:
             return False, rank, f"IV rank {rank:.0f}% too high"
         return True, rank, "ok"
 
     def get_size_modifier(self, symbol):
         """Adjust position size based on IV."""
-        rank = self.get_iv_rank(symbol)
+        _iv_tmp = self.get_iv_rank(symbol)
+        rank = _iv_tmp.get('iv_rank', 50) if isinstance(_iv_tmp, dict) else _iv_tmp
         if rank <= self.CHEAP_IV_RANK:
             return 1.15  # 15% bigger when IV cheap
         elif rank >= 60:
