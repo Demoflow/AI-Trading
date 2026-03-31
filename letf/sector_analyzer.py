@@ -8,6 +8,14 @@ from loguru import logger
 
 
 class SectorAnalyzer:
+    _spy_cache = None
+    _vix_cache = None
+
+    def reset_cache(self):
+        """Reset cached data for new scan cycle."""
+        SectorAnalyzer._spy_cache = None
+        SectorAnalyzer._vix_cache = None
+
 
     def __init__(self, client):
         self.client = client
@@ -50,11 +58,14 @@ class SectorAnalyzer:
         high_52 = quote.get("52WeekHigh", price)
         low_52 = quote.get("52WeekLow", price)
 
-        bull_score = 50
-        bear_score = 50
+        bull_score = 40
+        bear_score = 40  # Lower base so strong signals can reach 80+
 
         # Cache SPY data
-        spy_quote = self._get_quote("SPY")
+        # Use cached SPY data (set by caller or fetched once)
+        if not hasattr(self, '_spy_cache') or self._spy_cache is None:
+            self._spy_cache = self._get_quote("SPY")
+        spy_quote = self._spy_cache
         spy_change = spy_quote.get("netPercentChangeInDouble", 0) if spy_quote else 0
         signals = {}
 
@@ -71,13 +82,13 @@ class SectorAnalyzer:
         # 2. MOMENTUM: Today's change
         signals["change_pct"] = round(change_pct, 2)
         if change_pct > 1.5:
-            bull_score += 10
+            bull_score += 5  # Intraday less important for swing trades
         elif change_pct > 0.5:
-            bull_score += 5
+            bull_score += 3
         elif change_pct < -1.5:
-            bear_score += 10
-        elif change_pct < -0.5:
             bear_score += 5
+        elif change_pct < -0.5:
+            bear_score += 3
 
         # 3. VOLUME: Above average = conviction
         vol_ratio = volume / max(avg_volume, 1)
@@ -112,8 +123,21 @@ class SectorAnalyzer:
         signals["vix"] = vix
         if vix > 30:
             bear_score += 5  # Fear elevated
+        elif vix > 25:
+            bear_score += 3  # Elevated
         elif vix < 15:
             bull_score += 5  # Complacency
+        # VIX direction matters more than level
+        vix_change = vix_quote.get("netPercentChangeInDouble", 0) if vix_quote else 0
+        signals["vix_change"] = round(vix_change, 2)
+        if vix_change < -5:
+            bull_score += 8  # VIX dropping fast = bullish
+        elif vix_change < -2:
+            bull_score += 4
+        elif vix_change > 5:
+            bear_score += 8  # VIX rising fast = bearish
+        elif vix_change > 2:
+            bear_score += 4
 
         # 6. PRICE HISTORY ANALYSIS
         candles = self._get_price_history(underlying)
@@ -124,9 +148,13 @@ class SectorAnalyzer:
             mom_5d = (closes[-1] - closes[-5]) / closes[-5] * 100 if len(closes) >= 5 else 0
             signals["mom_5d"] = round(mom_5d, 2)
             if mom_5d > 3:
-                bull_score += 8
+                bull_score += 12  # 5-day trend is primary signal
+            elif mom_5d > 1:
+                bull_score += 6
             elif mom_5d < -3:
-                bear_score += 8
+                bear_score += 12
+            elif mom_5d < -1:
+                bear_score += 6
 
             # 10-day momentum
             mom_10d = (closes[-1] - closes[-10]) / closes[-10] * 100 if len(closes) >= 10 else 0

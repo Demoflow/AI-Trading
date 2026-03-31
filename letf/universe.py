@@ -17,7 +17,7 @@ SECTORS = {
         "leverage": 3, "name": "Semiconductors",
     },
     "fang": {
-        "bull": "FNGU", "bear": "FNGD", "underlying": "QQQ",
+        "bull": "FNGU", "bear": "FNGD", "underlying": "META",
         "leverage": 3, "name": "FANG+ Tech",
     },
     "biotech": {
