@@ -342,13 +342,34 @@ class PortfolioAnalyst:
             reasons.append(f"Flagged {consecutive} consecutive analyst runs")
             num_flags += 1
 
-        # ── DECISION with adaptive threshold ──
-        sell_threshold = self._get_sell_threshold()
-        warn_threshold = self._get_warn_threshold()
+        # ── WEIGHTED DECISION (not flat flag count) ──
+        FLAG_WEIGHTS = {
+            "DELTA_DEATH": 3, "EXPIRY_IMMINENT": 3, "THETA_BURN": 3, "WIDE_SPREAD": 2,
+            "STALE_LOSER": 2, "CAPITAL_INEFFICIENT": 2, "EARNINGS_IMMINENT": 2,
+            "NO_FLOW": 1, "SECTOR_AGAINST": 1, "VOL_REGIME_MISMATCH": 1,
+            "CROSS_ACCOUNT_CONFLICT": 1, "CROSS_SECTOR_CONFLICT": 1,
+            "PERSISTENT_WARNING": 2,
+        }
+        weighted_score = sum(FLAG_WEIGHTS.get(flag, 1) for flag in flags)
 
-        if num_flags >= sell_threshold:
+        # Adaptive thresholds (VIX-based)
+        sell_threshold = self._get_sell_threshold()
+        # Weighted thresholds: sell at 5+ points, warn at 3+ points
+        # Tighten in high VIX
+        vix_now = self._get_vix()
+        if vix_now > 30:
+            sell_pts = 4  # More aggressive in high VIX
+            warn_pts = 2
+        elif vix_now > 25:
+            sell_pts = 5
+            warn_pts = 3
+        else:
+            sell_pts = 6  # More patient in low VIX
+            warn_pts = 4
+
+        if weighted_score >= sell_pts:
             action = "SELL"
-        elif num_flags >= warn_threshold:
+        elif weighted_score >= warn_pts:
             action = "TRIM"
         else:
             action = "HOLD"
@@ -358,11 +379,12 @@ class PortfolioAnalyst:
             "contract": csym,
             "action": action,
             "score": score,
+            "weighted_score": weighted_score,
             "flags": flags,
             "reasons": reasons,
             "num_checks_failed": num_flags,
             "consecutive_flags": consecutive,
-            "sell_threshold": sell_threshold,
+            "sell_threshold": f"{sell_pts}pts",
         }
 
     # ══════════════════════════════════════════
@@ -509,12 +531,30 @@ class PortfolioAnalyst:
             reasons.append(f"Flagged {consecutive} consecutive runs")
             num_flags += 1
 
-        sell_threshold = self._get_sell_threshold()
-        warn_threshold = self._get_warn_threshold()
+        # Weighted scoring for LETFs
+        LETF_WEIGHTS = {
+            "SECTOR_REVERSED": 3, "MOMENTUM_REVERSAL": 2,
+            "CROSS_ACCOUNT_CONFLICT": 1, "LEVERAGE_DECAY": 2,
+            "HIGH_VIX_LONG": 2, "LOW_VIX_SHORT": 2,
+            "EARNINGS_RISK": 2, "CAPITAL_INEFFICIENT": 2,
+            "PERSISTENT_WARNING": 2,
+        }
+        weighted_score = sum(LETF_WEIGHTS.get(flag, 1) for flag in flags)
 
-        if num_flags >= sell_threshold:
+        vix_now = self._get_vix()
+        if vix_now > 30:
+            sell_pts = 4
+            warn_pts = 2
+        elif vix_now > 25:
+            sell_pts = 5
+            warn_pts = 3
+        else:
+            sell_pts = 6
+            warn_pts = 4
+
+        if weighted_score >= sell_pts:
             action = "SELL"
-        elif num_flags >= warn_threshold:
+        elif weighted_score >= warn_pts:
             action = "TRIM"
         else:
             action = "HOLD"
@@ -525,17 +565,18 @@ class PortfolioAnalyst:
             "direction": direction,
             "action": action,
             "score": score,
+            "weighted_score": weighted_score,
             "flags": flags,
             "reasons": reasons,
             "num_checks_failed": num_flags,
             "consecutive_flags": consecutive,
-            "sell_threshold": sell_threshold,
+            "sell_threshold": f"{sell_pts}pts",
         }
 
     # ══════════════════════════════════════════
     # IMPROVEMENT 6: Replacement trade identification
     # ══════════════════════════════════════════
-    def find_replacement(self, freed_capital, current_trades_file="config/aggressive_trades.json"):
+    def find_replacement(self, freed_capital, current_trades_file="config/candidates.json"):
         """Check if there are better trades available for freed capital."""
         try:
             if os.path.exists(current_trades_file):
@@ -650,7 +691,7 @@ class PortfolioAnalyst:
 
                 icon = "SELL" if action == "SELL" else ("WARN" if action == "TRIM" else " OK ")
                 consec_str = f" (run {consec})" if consec > 1 else ""
-                logger.info(f"  [{icon}] {sym} score={score}/8 flags={len(flags)}{consec_str}")
+                logger.info(f"  [{icon}] {sym} score={score}/8 wt={result.get('weighted_score',0)}pts flags={len(flags)}{consec_str}")
                 for r in result["reasons"]:
                     logger.info(f"        {r}")
 
@@ -675,7 +716,7 @@ class PortfolioAnalyst:
 
                 icon = "SELL" if action == "SELL" else ("WARN" if action == "TRIM" else " OK ")
                 consec_str = f" (run {consec})" if consec > 1 else ""
-                logger.info(f"  [{icon}] {sym} ({result['direction']}) score={score}/7 flags={len(result['flags'])}{consec_str}")
+                logger.info(f"  [{icon}] {sym} ({result['direction']}) score={score}/7 wt={result.get('weighted_score',0)}pts flags={len(result['flags'])}{consec_str}")
                 for r in result["reasons"]:
                     logger.info(f"        {r}")
 

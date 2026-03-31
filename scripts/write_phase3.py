@@ -1,180 +1,287 @@
 """
-Perplexity scaling analysis fixes:
-1. Hard regime gate for CALL entries in downtrends
-2. Fix peak equity tracking
-3. Verify exit loop is working
-4. Adjust sizing constants for small account
+Portfolio Analyst improvements from Perplexity review:
+1. Weighted scoring (replace flat flag count)
+2. Fix T/VZ sector mapping
+3. Save candidates.json for replacement logic
 """
 import os, json
 
 # ══════════════════════════════════════════════════
-# FIX 1: HARD REGIME GATE
-# TRENDING_DOWN + VIX > 25:
-#   - CALL entries require technical confirmation
-#   - PUT entries get +10 conviction bonus
+# FIX 1: WEIGHTED SCORING
+# Replace flat flag count with weighted points.
+# Critical failures (Greeks) = 3 pts
+# P&L/time failures = 2 pts
+# Macro/sector = 1 pt
 # ══════════════════════════════════════════════════
 
-f = open("aggressive/aggressive_scanner.py", "r", encoding="utf-8").read()
+f = open("aggressive/portfolio_analyst.py", "r", encoding="utf-8").read()
 
-if "regime_gate" not in f:
-    # Find where conviction filter happens and add regime gate after
-    old_conviction = '''if analysis["conviction"] in ("SKIP", "LOW", "MEDIUM") or analysis["composite"] < 85:
-                    skipped["low_score"] += 1
-                    continue'''
+# Define flag weights
+WEIGHTS = {
+    # Critical (3 pts) — position is dying
+    "DELTA_DEATH": 3,
+    "EXPIRY_IMMINENT": 3,
+    "THETA_BURN": 3,
+    "WIDE_SPREAD": 2,
+    # P&L / Time (2 pts) — losing money or stale
+    "STALE_LOSER": 2,
+    "CAPITAL_INEFFICIENT": 2,
+    "LEVERAGE_DECAY": 2,
+    "EARNINGS_IMMINENT": 2,
+    "EARNINGS_RISK": 2,
+    # Macro / Sector (1 pt) — context mismatch
+    "NO_FLOW": 1,
+    "SECTOR_AGAINST": 1,
+    "SECTOR_REVERSED": 1,
+    "MOMENTUM_REVERSAL": 1,
+    "VOL_REGIME_MISMATCH": 1,
+    "CROSS_ACCOUNT_CONFLICT": 1,
+    "CROSS_SECTOR_CONFLICT": 1,
+    "HIGH_VIX_LONG": 1,
+    "LOW_VIX_SHORT": 1,
+    "PERSISTENT_WARNING": 2,
+}
 
-    new_conviction = '''if analysis["conviction"] in ("SKIP", "LOW", "MEDIUM") or analysis["composite"] < 85:
-                    skipped["low_score"] += 1
-                    continue
+# Replace the flat flag-count decision logic in analyze_option_position
+old_option_decision = '''        # ── DECISION with adaptive threshold ──
+        sell_threshold = self._get_sell_threshold()
+        warn_threshold = self._get_warn_threshold()
 
-                # REGIME GATE: In downtrends with high VIX, filter aggressively
-                regime_gate = True
-                try:
-                    regime = self.analyzer.regime if hasattr(self.analyzer, 'regime') else ""
-                    if "DOWN" in str(regime).upper() and vix > 25:
-                        if flow["direction"] == "CALL":
-                            # Require price above 20-day SMA for calls in downtrend
-                            df = price_cache.get(sym)
-                            if df is not None and len(df) >= 20:
-                                sma20 = df["close"].tail(20).mean()
-                                current = df["close"].iloc[-1]
-                                rsi = analysis.get("sub_scores", {}).get("rsi", 50)
-                                if current < sma20 and rsi < 50:
-                                    regime_gate = False
-                                    skipped["filter"] += 1
-                        elif flow["direction"] == "PUT":
-                            # Boost PUT conviction in downtrends
-                            analysis["composite"] = min(100, analysis["composite"] + 10)
-                except Exception:
-                    pass
-                if not regime_gate:
-                    continue'''
-
-    if old_conviction in f:
-        f = f.replace(old_conviction, new_conviction)
-        print("1. Regime gate ADDED: CALLs require SMA+RSI confirmation in downtrends, PUTs get +10")
-    else:
-        print("1. Could not find conviction filter - checking...")
-        if "low_score" in f:
-            print("   Found low_score but format differs")
+        if num_flags >= sell_threshold:
+            action = "SELL"
+        elif num_flags >= warn_threshold:
+            action = "TRIM"
         else:
-            print("   WARNING: conviction filter not found")
+            action = "HOLD"
 
-    open("aggressive/aggressive_scanner.py", "w", encoding="utf-8").write(f)
+        return {
+            "symbol": sym,
+            "contract": csym,
+            "action": action,
+            "score": score,
+            "flags": flags,
+            "reasons": reasons,
+            "num_checks_failed": num_flags,
+            "consecutive_flags": consecutive,
+            "sell_threshold": sell_threshold,
+        }'''
+
+new_option_decision = '''        # ── WEIGHTED DECISION (not flat flag count) ──
+        FLAG_WEIGHTS = {
+            "DELTA_DEATH": 3, "EXPIRY_IMMINENT": 3, "THETA_BURN": 3, "WIDE_SPREAD": 2,
+            "STALE_LOSER": 2, "CAPITAL_INEFFICIENT": 2, "EARNINGS_IMMINENT": 2,
+            "NO_FLOW": 1, "SECTOR_AGAINST": 1, "VOL_REGIME_MISMATCH": 1,
+            "CROSS_ACCOUNT_CONFLICT": 1, "CROSS_SECTOR_CONFLICT": 1,
+            "PERSISTENT_WARNING": 2,
+        }
+        weighted_score = sum(FLAG_WEIGHTS.get(flag, 1) for flag in flags)
+
+        # Adaptive thresholds (VIX-based)
+        sell_threshold = self._get_sell_threshold()
+        # Weighted thresholds: sell at 5+ points, warn at 3+ points
+        # Tighten in high VIX
+        vix_now = self._get_vix()
+        if vix_now > 30:
+            sell_pts = 4  # More aggressive in high VIX
+            warn_pts = 2
+        elif vix_now > 25:
+            sell_pts = 5
+            warn_pts = 3
+        else:
+            sell_pts = 6  # More patient in low VIX
+            warn_pts = 4
+
+        if weighted_score >= sell_pts:
+            action = "SELL"
+        elif weighted_score >= warn_pts:
+            action = "TRIM"
+        else:
+            action = "HOLD"
+
+        return {
+            "symbol": sym,
+            "contract": csym,
+            "action": action,
+            "score": score,
+            "weighted_score": weighted_score,
+            "flags": flags,
+            "reasons": reasons,
+            "num_checks_failed": num_flags,
+            "consecutive_flags": consecutive,
+            "sell_threshold": f"{sell_pts}pts",
+        }'''
+
+if old_option_decision in f:
+    f = f.replace(old_option_decision, new_option_decision)
+    print("1a. Options: weighted scoring ADDED (flat count replaced)")
 else:
-    print("1. Regime gate already present")
+    print("1a. Could not find option decision block - checking...")
+    if "weighted_score" in f:
+        print("   Already has weighted scoring")
+    else:
+        print("   Format differs - needs manual review")
 
-# ══════════════════════════════════════════════════
-# FIX 2: PEAK EQUITY TRACKING
-# Update peak_equity on every monitoring cycle.
-# Fix the stale breaker_state.json.
-# ══════════════════════════════════════════════════
+# Same for LETF positions
+old_letf_decision = '''        sell_threshold = self._get_sell_threshold()
+        warn_threshold = self._get_warn_threshold()
 
-# Fix the breaker state
-breaker_path = "config/breaker_state.json"
-if os.path.exists(breaker_path):
-    bs = json.load(open(breaker_path))
-    old_peak = bs.get("peak", 0)
-    # Update to current equity
-    bs["peak"] = 8484.85  # Current brokerage equity from tonight's check
-    bs["last_updated"] = "2026-03-30"
-    json.dump(bs, open(breaker_path, "w"), indent=2)
-    print(f"2a. Breaker state: peak updated from ${old_peak:,.0f} to $8,484.85")
+        if num_flags >= sell_threshold:
+            action = "SELL"
+        elif num_flags >= warn_threshold:
+            action = "TRIM"
+        else:
+            action = "HOLD"
 
-# Add peak tracking to the live monitoring loop
-g = open("scripts/aggressive_live.py", "r", encoding="utf-8").read()
+        return {
+            "symbol": sym,
+            "sector": sector,
+            "direction": direction,
+            "action": action,
+            "score": score,
+            "flags": flags,
+            "reasons": reasons,
+            "num_checks_failed": num_flags,
+            "consecutive_flags": consecutive,
+            "sell_threshold": sell_threshold,
+        }'''
 
-if "update_peak_equity" not in g:
-    # Add peak equity update in the STATUS section
-    old_status_section = "        # ── STATUS ──"
-    new_status_section = """        # ── PEAK EQUITY TRACKING ──
-        if not paper and cycle % 20 == 0:  # Every ~10 min
-            try:
-                _bal = client.get_account(client.get_account_numbers().json()[1]["hashValue"])
-                _eq = _bal.json().get("securitiesAccount", {}).get("currentBalances", {}).get("liquidationValue", 0)
-                if _eq > 0:
-                    _bs_path = "config/breaker_state.json"
-                    if os.path.exists(_bs_path):
-                        _bs = json.load(open(_bs_path))
-                        if _eq > _bs.get("peak", 0):
-                            _bs["peak"] = _eq
-                            _bs["last_updated"] = date.today().isoformat()
-                            json.dump(_bs, open(_bs_path, "w"), indent=2)
-                            logger.info(f"NEW PEAK EQUITY: ${_eq:,.2f}")
-            except Exception:
-                pass
+new_letf_decision = '''        # Weighted scoring for LETFs
+        LETF_WEIGHTS = {
+            "SECTOR_REVERSED": 3, "MOMENTUM_REVERSAL": 2,
+            "CROSS_ACCOUNT_CONFLICT": 1, "LEVERAGE_DECAY": 2,
+            "HIGH_VIX_LONG": 2, "LOW_VIX_SHORT": 2,
+            "EARNINGS_RISK": 2, "CAPITAL_INEFFICIENT": 2,
+            "PERSISTENT_WARNING": 2,
+        }
+        weighted_score = sum(LETF_WEIGHTS.get(flag, 1) for flag in flags)
 
-        # ── STATUS ──"""
-    g = g.replace(old_status_section, new_status_section, 1)
-    open("scripts/aggressive_live.py", "w", encoding="utf-8").write(g)
-    print("2b. Peak equity auto-update ADDED to monitoring loop")
+        vix_now = self._get_vix()
+        if vix_now > 30:
+            sell_pts = 4
+            warn_pts = 2
+        elif vix_now > 25:
+            sell_pts = 5
+            warn_pts = 3
+        else:
+            sell_pts = 6
+            warn_pts = 4
+
+        if weighted_score >= sell_pts:
+            action = "SELL"
+        elif weighted_score >= warn_pts:
+            action = "TRIM"
+        else:
+            action = "HOLD"
+
+        return {
+            "symbol": sym,
+            "sector": sector,
+            "direction": direction,
+            "action": action,
+            "score": score,
+            "weighted_score": weighted_score,
+            "flags": flags,
+            "reasons": reasons,
+            "num_checks_failed": num_flags,
+            "consecutive_flags": consecutive,
+            "sell_threshold": f"{sell_pts}pts",
+        }'''
+
+if old_letf_decision in f:
+    f = f.replace(old_letf_decision, new_letf_decision)
+    print("1b. LETF: weighted scoring ADDED")
 else:
-    print("2b. Peak equity tracking already present")
+    if "LETF_WEIGHTS" in f:
+        print("1b. LETF weighted scoring already present")
+    else:
+        print("1b. Could not find LETF decision block")
+
+# Update the logging to show weighted score
+f = f.replace(
+    'f"  [{icon}] {sym} score={score}/8 flags={len(flags)}{consec_str}"',
+    'f"  [{icon}] {sym} score={score}/8 wt={result.get(\'weighted_score\',0)}pts flags={len(flags)}{consec_str}"'
+)
+f = f.replace(
+    'f"  [{icon}] {sym} ({result[\'direction\']}) score={score}/7 flags={len(result[\'flags\'])}{consec_str}"',
+    'f"  [{icon}] {sym} ({result[\'direction\']}) score={score}/7 wt={result.get(\'weighted_score\',0)}pts flags={len(result[\'flags\'])}{consec_str}"'
+)
+
+open("aggressive/portfolio_analyst.py", "w", encoding="utf-8").write(f)
 
 # ══════════════════════════════════════════════════
-# FIX 3: SIZING CONSTANTS FOR SMALL ACCOUNT
-# HIGH = 6% per trade (was 25%)
-# MEDIUM = 4% per trade (was 6%)
-# This targets ~$450/trade at current equity
+# FIX 2: T/VZ SECTOR MAPPING
+# T and VZ are telecom, not tech
 # ══════════════════════════════════════════════════
 
-h = open("aggressive/deep_analyzer.py", "r", encoding="utf-8").read()
+sm = open("aggressive/sector_momentum.py", "r", encoding="utf-8").read()
 
-if "0.25" in h and "HIGH" in h:
-    # Find the HIGH conviction sizing
-    lines = h.splitlines()
-    fixed_sizing = False
-    for i, line in enumerate(lines):
-        if "0.25" in line and ("vm" in line or "iv_mod" in line or "sector" in line) and "sp" in line:
-            # This is the HIGH conviction size line
-            old_line = line
-            new_line = line.replace("0.25", "0.08")
-            lines[i] = new_line
-            print(f"3a. HIGH sizing: 25% -> 8% (line {i+1})")
-            fixed_sizing = True
-            break
+# Fix SECTOR_ETFS - add telecom
+if '"telecom"' not in sm:
+    sm = sm.replace(
+        '"reits": "XLRE",',
+        '"reits": "XLRE",\n    "telecom": "IYZ",  # Telecom ETF'
+    )
+    print("2a. Added telecom sector ETF (IYZ)")
 
-    if not fixed_sizing:
-        # Try different pattern
+# Fix SYMBOL_SECTOR - move T and VZ to telecom
+if '"T": "tech"' in sm:
+    sm = sm.replace('"T": "tech"', '"T": "telecom"')
+    sm = sm.replace('"VZ": "tech"', '"VZ": "telecom"')
+    print("2b. Moved T and VZ from tech -> telecom")
+else:
+    print("2b. T/VZ mapping - checking current state...")
+    if '"T": "telecom"' in sm:
+        print("   Already mapped to telecom")
+    else:
+        lines = sm.splitlines()
         for i, line in enumerate(lines):
-            if "sp = 0.25" in line:
-                lines[i] = line.replace("sp = 0.25", "sp = 0.08")
-                print(f"3a. HIGH sizing: 25% -> 8% (line {i+1})")
-                fixed_sizing = True
-                break
+            if '"T"' in line and ":" in line:
+                print(f"   Line {i+1}: {line.strip()}")
 
-    # Find MEDIUM sizing
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if "0.06" in stripped and ("vm" in stripped or "iv_mod" in stripped) and "sp" in stripped:
-            if "0.06" in stripped and "MEDIUM" not in stripped:
-                # Could be the MEDIUM line
-                pass
-
-    h = "\n".join(lines)
-    open("aggressive/deep_analyzer.py", "w", encoding="utf-8").write(h)
-else:
-    # Check what the current sizing constants are
-    lines = h.splitlines()
-    for i, line in enumerate(lines):
-        if "sp =" in line and ("vm" in line or "0." in line):
-            print(f"3. Sizing line {i+1}: {line.strip()}")
+open("aggressive/sector_momentum.py", "w", encoding="utf-8").write(sm)
 
 # ══════════════════════════════════════════════════
-# FIX 4: UPDATE CONFIG EQUITY TO REAL VALUE
+# FIX 3: SAVE CANDIDATES.JSON FOR REPLACEMENT LOGIC
+# The scanner should save ALL qualifying trades,
+# not just the ones it plans to enter.
+# Replacement logic reads from candidates, not trades.
 # ══════════════════════════════════════════════════
 
-# Update .env equity if it exists
-env_path = ".env"
-if os.path.exists(env_path):
-    env = open(env_path, "r").read()
-    if "ACCOUNT_EQUITY" in env:
-        lines = env.splitlines()
-        for i, line in enumerate(lines):
-            if line.startswith("ACCOUNT_EQUITY"):
-                lines[i] = "ACCOUNT_EQUITY=8484.85"
-                print("4. Updated .env ACCOUNT_EQUITY to $8,484.85")
-                break
-        open(env_path, "w").write("\n".join(lines))
+scanner = open("aggressive/aggressive_scanner.py", "r", encoding="utf-8").read()
+
+if "candidates.json" not in scanner:
+    # Find where trades are saved and also save candidates
+    old_save = 'json.dump(output, open("config/aggressive_trades.json"'
+    if old_save in scanner:
+        new_save = '''# Save candidates (all qualifying trades including overflow)
+        candidates = {
+            "scan_date": output.get("scan_date", ""),
+            "candidates": [t for t in output.get("trades", [])],
+        }
+        json.dump(candidates, open("config/candidates.json", "w"), indent=2)
+        logger.info(f"Saved {len(candidates['candidates'])} candidates for replacement logic")
+
+        json.dump(output, open("config/aggressive_trades.json"'''
+        scanner = scanner.replace(old_save, new_save, 1)
+        print("3a. Scanner now saves candidates.json")
+    else:
+        print("3a. Could not find trade save location")
+
+    # Update the analyst's find_replacement to use candidates.json
+    analyst = open("aggressive/portfolio_analyst.py", "r", encoding="utf-8").read()
+    analyst = analyst.replace(
+        'def find_replacement(self, freed_capital, current_trades_file="config/aggressive_trades.json"):',
+        'def find_replacement(self, freed_capital, current_trades_file="config/candidates.json"):'
+    )
+    open("aggressive/portfolio_analyst.py", "w", encoding="utf-8").write(analyst)
+    print("3b. Analyst find_replacement now reads candidates.json")
+
+    open("aggressive/aggressive_scanner.py", "w", encoding="utf-8").write(scanner)
+
+# Initialize candidates.json
+if not os.path.exists("config/candidates.json"):
+    json.dump({"scan_date": "", "candidates": []}, open("config/candidates.json", "w"), indent=2)
+    print("3c. Created config/candidates.json")
 
 # ══════════════════════════════════════════════════
 # VERIFY
@@ -182,9 +289,9 @@ if os.path.exists(env_path):
 print()
 import py_compile
 for path in [
+    "aggressive/portfolio_analyst.py",
+    "aggressive/sector_momentum.py",
     "aggressive/aggressive_scanner.py",
-    "aggressive/deep_analyzer.py",
-    "scripts/aggressive_live.py",
 ]:
     try:
         py_compile.compile(path, doraise=True)
@@ -194,23 +301,17 @@ for path in [
 
 print()
 print("=" * 60)
-print("  SCALING FIXES COMPLETE")
+print("  PORTFOLIO ANALYST IMPROVEMENTS COMPLETE")
 print("=" * 60)
 print()
-print("  1. Regime gate: CALLs in downtrends require")
-print("     price > 20-day SMA AND RSI > 50")
-print("     PUTs in downtrends get +10 conviction bonus")
+print("  1. Weighted scoring:")
+print("     Greeks death (delta/theta/expiry) = 3 pts")
+print("     P&L/time (stale loser, inefficient) = 2 pts")
+print("     Macro/sector (alignment, conflict) = 1 pt")
+print("     VIX>30: sell at 4pts, warn at 2pts")
+print("     VIX<25: sell at 6pts, warn at 4pts")
 print()
-print("  2. Peak equity: auto-updates every 10 min")
-print("     Breaker state updated to current $8,484.85")
+print("  2. T/VZ mapped to telecom (IYZ), not tech (XLK)")
 print()
-print("  3. Sizing: HIGH conviction 8% per trade (was 25%)")
-print("     Targets ~$680/trade, 8 positions = $5,440 (64%)")
-print()
-print("  4. Config equity updated to real value")
-print()
-print("  Impact on tomorrow's scan:")
-print("    - Fewer CALLs in downtrend (must pass SMA+RSI)")
-print("    - More PUTs selected (conviction boost)")
-print("    - Smaller positions, more diversification")
-print("    - Drawdown tracking active from correct peak")
+print("  3. candidates.json for replacement trades")
+print("     Analyst uses candidate pool, not live trades")

@@ -9,6 +9,7 @@ SECTOR_ETFS = {
     "tech": "XLK", "semis": "SOXX", "energy": "XLE", "banks": "XLF",
     "pharma": "XLV", "defense": "ITA", "airlines": "JETS",
     "mining": "GDX", "retail": "XRT", "saas": "IGV", "reits": "XLRE",
+    "telecom": "IYZ",  # Telecom ETF
 }
 
 # Map symbols to sectors
@@ -26,7 +27,7 @@ SYMBOL_SECTOR = {
     "NEM": "mining", "FCX": "mining",
     "ABNB": "retail", "DIS": "retail",
     "DELL": "tech", "ANET": "tech", "NFLX": "tech",
-    "T": "tech", "VZ": "tech",
+    "T": "telecom", "VZ": "telecom",
     "FDX": "retail",
 }
 
