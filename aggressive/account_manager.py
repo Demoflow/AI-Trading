@@ -13,8 +13,8 @@ TRADE_LOG = "config/trade_log.json"
 
 class AccountManager:
 
-    MIN_CASH_RESERVE_PCT = 0.20  # Always keep 20% cash
-    MAX_PORTFOLIO_HEAT = 0.70    # Max 70% of equity deployed
+    MIN_CASH_RESERVE_PCT = 0.15  # Always keep 20% cash
+    MAX_PORTFOLIO_HEAT = 0.80    # Max 70% of equity deployed
     DAILY_LOSS_HALT_PCT = 0.05   # Halt if down 5% in a day
     WIN_RATE_REDUCE_THRESHOLD = 0.45  # Reduce size if WR < 45%
     WIN_RATE_LOOKBACK = 10       # Last 10 trades
