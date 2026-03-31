@@ -120,17 +120,37 @@ class AccountManager:
         self._save_trade_log()
 
     def check_daily_halt(self):
-        """Check if daily loss limit has been hit."""
+        """Check if daily loss limit has been hit (mark-to-market)."""
         acct = self.get_real_equity()
         if not acct:
             return False
 
-        today = date.today().isoformat()
-        daily_pnl = self.trade_log.get("daily_pnl", {}).get(today, 0)
         equity = acct["equity"]
+        today = date.today().isoformat()
 
-        if daily_pnl < -(equity * self.DAILY_LOSS_HALT_PCT):
-            logger.warning(f"DAILY HALT: P&L ${daily_pnl:+,.0f} exceeds {self.DAILY_LOSS_HALT_PCT:.0%} of equity")
+        # Track starting equity for the day
+        if "daily_start_equity" not in self.trade_log:
+            self.trade_log["daily_start_equity"] = {}
+        if today not in self.trade_log["daily_start_equity"]:
+            self.trade_log["daily_start_equity"][today] = equity
+            self._save_trade_log()
+
+        start_equity = self.trade_log["daily_start_equity"].get(today, equity)
+
+        # Mark-to-market: compare current equity to start of day
+        # This captures BOTH realized and unrealized losses
+        mtm_pnl = equity - start_equity
+
+        # Also check realized P&L
+        realized_pnl = self.trade_log.get("daily_pnl", {}).get(today, 0)
+
+        # Use the worse of the two
+        effective_pnl = min(mtm_pnl, realized_pnl)
+
+        if effective_pnl < -(start_equity * self.DAILY_LOSS_HALT_PCT):
+            logger.warning(f"DAILY HALT (mark-to-market): equity ${equity:,.0f} "
+                          f"start ${start_equity:,.0f} change ${mtm_pnl:+,.0f} "
+                          f"({mtm_pnl/start_equity:.1%})")
             return True
         return False
 

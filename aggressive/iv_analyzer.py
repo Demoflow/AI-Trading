@@ -17,76 +17,141 @@ class IVAnalyzer:
         self.client = schwab_client
         self.cache = {}
 
-    def get_iv_rank(self, symbol):
-        """Get IV rank (0-100) for a symbol."""
-        if symbol in self.cache:
-            return self.cache[symbol]
-
+    def get_iv_rank(self, symbol, chain_data=None):
+        """
+        Calculate IV rank using REAL implied volatility from option chain.
+        If chain data available: uses ATM option IV vs historical proxy.
+        Fallback: uses Schwab quote's 'volatility' field.
+        """
         try:
-            from schwab.client import Client
-            resp = self.client.get_option_chain(
-                symbol,
-                contract_type=Client.Options.ContractType.ALL,
-                strike_count=5,
-                include_underlying_quote=True,
-                strategy=Client.Options.Strategy.SINGLE,
-            )
-            if resp.status_code != httpx.codes.OK:
-                return 50
+            # Method 1: Use chain data if available (most accurate)
+            if chain_data:
+                atm_iv = self._extract_atm_iv(chain_data, symbol)
+                if atm_iv and atm_iv > 0:
+                    # Compare to historical range
+                    # For now, use VIX as a rough benchmark
+                    # IV rank = where this stock's IV sits relative to market
+                    import time
+                    time.sleep(0.05)
+                    vix_q = self.client.get_quote("$VIX")
+                    vix = 20
+                    if vix_q and vix_q.status_code == 200:
+                        vix = vix_q.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20)
 
-            chain = resp.json()
-            volatility = chain.get("volatility", 0)
+                    # Stock IV vs VIX gives relative IV positioning
+                    # IV rank approximation: how elevated is this stock's IV
+                    # If stock IV >> VIX, options are expensive (high IV rank)
+                    # If stock IV << VIX, options are cheap (low IV rank)
+                    iv_ratio = atm_iv / max(vix, 10)
 
-            # Get underlying stats for IV context
-            underlying = chain.get("underlying", {})
-            hi52 = underlying.get("fiftyTwoWeekHigh", 0)
-            lo52 = underlying.get("fiftyTwoWeekLow", 0)
-            price = chain.get("underlyingPrice", 0)
+                    if iv_ratio > 2.0:
+                        iv_rank = 90  # Very expensive
+                    elif iv_ratio > 1.5:
+                        iv_rank = 75
+                    elif iv_ratio > 1.2:
+                        iv_rank = 60
+                    elif iv_ratio > 0.8:
+                        iv_rank = 40
+                    elif iv_ratio > 0.5:
+                        iv_rank = 25
+                    else:
+                        iv_rank = 10  # Very cheap
 
-            # Estimate IV rank from chain data
-            # Use the ATM call IV as current IV
-            current_iv = volatility
-            call_map = chain.get("callExpDateMap", {})
+                    return {
+                        "iv_rank": iv_rank,
+                        "atm_iv": round(atm_iv, 1),
+                        "vix": vix,
+                        "iv_ratio": round(iv_ratio, 2),
+                        "method": "chain_iv",
+                    }
 
-            atm_ivs = []
-            for exp_key, strikes in call_map.items():
+            # Method 2: Fallback to quote-level data
+            import time
+            time.sleep(0.05)
+            r = self.client.get_quote(symbol)
+            if r.status_code == 200:
+                q = r.json().get(symbol, {}).get("quote", {})
+                hi52 = q.get("52WeekHigh", 0)
+                lo52 = q.get("52WeekLow", 0)
+                price = q.get("lastPrice", 0)
+
+                if hi52 > lo52 and price > 0:
+                    # Use historical volatility proxy from price range
+                    # This is the old method but with better scaling
+                    range_pct = (hi52 - lo52) / lo52 * 100
+                    price_pos = (price - lo52) / (hi52 - lo52) * 100
+
+                    # Stocks near 52w low tend to have higher IV
+                    # Stocks near 52w high tend to have lower IV
+                    # But scale with VIX environment
+                    vix_q = self.client.get_quote("$VIX")
+                    vix = 20
+                    if vix_q and vix_q.status_code == 200:
+                        vix = vix_q.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20)
+
+                    base_iv_rank = 100 - price_pos  # Near low = high IV
+                    # Adjust for VIX environment
+                    if vix > 25:
+                        base_iv_rank = min(95, base_iv_rank + 20)  # Everything is expensive
+                    elif vix > 20:
+                        base_iv_rank = min(90, base_iv_rank + 10)
+
+                    iv_rank = max(5, min(95, base_iv_rank))
+                    return {
+                        "iv_rank": round(iv_rank, 1),
+                        "atm_iv": 0,
+                        "vix": vix,
+                        "method": "price_proxy_vix_adjusted",
+                    }
+
+            return {"iv_rank": 50, "atm_iv": 0, "vix": 20, "method": "default"}
+
+        except Exception as e:
+            return {"iv_rank": 50, "atm_iv": 0, "vix": 20, "method": f"error_{e}"}
+
+    def _extract_atm_iv(self, chain_data, symbol):
+        """Extract ATM implied volatility from option chain."""
+        try:
+            price_q = self.client.get_quote(symbol)
+            if price_q.status_code != 200:
+                return None
+            price = price_q.json().get(symbol, {}).get("quote", {}).get("lastPrice", 0)
+            if price <= 0:
+                return None
+
+            # Check calls first
+            call_map = chain_data.get("callExpDateMap", {})
+            for ek, strikes in call_map.items():
                 try:
-                    dte = int(exp_key.split(":")[1])
+                    dte = int(ek.split(":")[1])
                 except (IndexError, ValueError):
                     continue
                 if not (20 <= dte <= 45):
                     continue
+
+                best_dist = 999
+                best_iv = None
                 for sk, contracts in strikes.items():
-                    for c in (contracts if isinstance(contracts, list) else [contracts]):
-                        delta = abs(c.get("delta", 0))
-                        iv = c.get("volatility", 0)
-                        if 0.40 <= delta <= 0.60 and iv > 0:
-                            atm_ivs.append(iv)
+                    try:
+                        strike = float(sk)
+                    except ValueError:
+                        continue
+                    dist = abs(strike - price)
+                    if dist < best_dist:
+                        best_dist = dist
+                        for c in (contracts if isinstance(contracts, list) else [contracts]):
+                            iv = c.get("volatility", 0)
+                            if iv > 0:
+                                best_iv = iv
+                if best_iv:
+                    return best_iv
+                break  # Only check first valid expiration
 
-            if not atm_ivs:
-                self.cache[symbol] = 50
-                return 50
+        except Exception:
+            pass
+        return None
 
-            current_iv = sum(atm_ivs) / len(atm_ivs)
-
-            # Estimate IV rank using price range as proxy
-            # Stocks near 52w high tend to have lower IV
-            # Stocks that dropped hard tend to have higher IV
-            if hi52 > 0 and lo52 > 0 and price > 0:
-                price_rank = (price - lo52) / (hi52 - lo52) * 100
-                # IV tends inversely with price rank
-                iv_rank = max(0, min(100, 100 - price_rank + (current_iv - 30)))
-            else:
-                iv_rank = min(100, current_iv)
-
-            iv_rank = max(0, min(100, iv_rank))
-            self.cache[symbol] = round(iv_rank, 1)
-            return round(iv_rank, 1)
-
-        except Exception as e:
-            logger.debug(f"IV rank error {symbol}: {e}")
-            return 50
-
+    
     def should_trade(self, symbol):
         """Returns (ok, iv_rank, reason)"""
         rank = self.get_iv_rank(symbol)

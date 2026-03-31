@@ -216,8 +216,8 @@ class CompositeScorer:
             "atr_14", latest["close"] * 0.02
         )
         sl = round(latest["close"] + (2 * atr), 2)
-        t1 = round(latest["close"] * 0.97, 2)
-        t2 = round(latest["close"] * 0.95, 2)
+        t1 = round(latest["close"] - (1.5 * atr), 2)  # ATR-based
+        t2 = round(latest["close"] - (2.5 * atr), 2)  # ATR-based
         result["trade_params"]["stop_loss"] = sl
         result["trade_params"]["target_1"] = t1
         result["trade_params"]["target_2"] = t2
