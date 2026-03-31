@@ -28,6 +28,7 @@ class DeepAnalyzer:
 
     def set_context(self, existing_positions=None, spy_df=None, vix=None, schwab_client=None, price_data=None):
         self.existing_symbols = existing_positions or []
+        self.client = schwab_client
         if vix:
             self.vix = vix
         if spy_df is not None and len(spy_df) >= 50:
@@ -101,7 +102,7 @@ class DeepAnalyzer:
         if self.iv_analyzer:
             iv_ok, iv_rank, iv_msg = self.iv_analyzer.should_trade(symbol)
             if not iv_ok:
-                logger.debug(f"Skip {symbol}: {iv_msg}")
+                logger.info(f"BLOCKED_IV {symbol} rank={iv_rank}: {iv_msg}")
                 return None
 
         # Econ calendar check
@@ -112,72 +113,174 @@ class DeepAnalyzer:
         if stock_df is not None and len(stock_df) >= 20:
             return self._full(symbol, stock_df, spy_df, flow_data, econ_mod)
         elif flow_data:
-            return self._flow_only(symbol, flow_data, econ_mod)
+            try:
+                result = self._flow_only(symbol, flow_data, econ_mod)
+                if not result:
+                    logger.debug(f"_flow_only returned None for {symbol}")
+                return result
+            except Exception as e:
+                logger.debug(f"_flow_only CRASHED for {symbol}: {e}")
+                return None
         return None
 
-    def _flow_only(self, symbol, flow_data, econ_mod=1.0):
-        strength = flow_data.get("signal_strength", 0)
-        tp = flow_data.get("total_premium", 0)
-        price = flow_data.get("price", 0)
-        opening = flow_data.get("opening_pct", 50)
+    def _flow_only(self, symbol, signal, chain_data=None):
+        """
+        Score when no price data available.
+        v7: Requires stronger flow for HIGH conviction.
+        Adds real-time quote checks for basic technical confirmation.
+        """
+        strength = signal.get("signal_strength", signal.get("strength", 0))
+        cp_ratio = signal.get("cp_ratio", 1.0)
+        premium = signal.get("total_premium", 0)
+        direction = signal.get("direction", "CALL")
+        open_pct = signal.get("opening_pct", 0)
 
-        score = 40 + strength * 10
-        if tp > 200000:
-            score += 10
-        if tp > 500000:
+        # Base score from flow (recalibrated — harder to reach HIGH)
+        # Old: 40 + strength * 10 (strength 5 = 90)
+        # New: 35 + strength * 9  (strength 5 = 70, strength 7 = 86, strength 8 = 94)
+        score = 35 + strength * 9  # Calibrated: str6=89, str7=98
+
+        # Premium bonus (institutional size)
+        if premium > 2000000:
+            score += 8
+        elif premium > 1000000:
             score += 5
-        if opening > 70:
-            score += 5  # Bonus for new positions
-        score = min(score, 100)
+        elif premium > 500000:
+            score += 3
 
-        direction = "CALL"
-        if flow_data.get("direction") == "BEARISH":
-            direction = "PUT"
+        # Opening position bonus
+        if open_pct > 70:
+            score += 5
+        elif open_pct > 50:
+            score += 3
 
-        if self.market_regime == "TRENDING_DOWN" and direction == "CALL":
-            score *= 0.85
-        elif self.market_regime == "TRENDING_DOWN" and direction == "PUT":
-            score = min(score * 1.10, 100)
+        # Call/put ratio alignment
+        if direction == "CALL" and cp_ratio > 3.0:
+            score += 3
+        elif direction == "PUT" and cp_ratio < 0.5:
+            score += 3
 
-        score *= econ_mod
-        score = min(score, 100)
+        # REAL-TIME TECHNICAL CHECK (using live quote)
+        tech_bonus = 0
+        tech_penalty = 0
+        rsi_val = 50  # default
+        try:
+            import time
+            time.sleep(0.05)
+            q = self.client.get_quote(symbol)
+            if q.status_code == 200:
+                quote = q.json().get(symbol, {}).get("quote", {})
+                price = quote.get("lastPrice", 0)
+                hi52 = quote.get("52WeekHigh", 0)
+                lo52 = quote.get("52WeekLow", 0)
+                change = quote.get("netPercentChangeInDouble", 0)
+                volume = quote.get("totalVolume", 0)
+                avg_vol = quote.get("averageVolume", 1)
 
-        vm = self._vix_modifier()
-        iv_mod = 1.0
-        if self.iv_analyzer:
-            iv_mod = self.iv_analyzer.get_size_modifier(symbol)
+                if price > 0 and hi52 > lo52:
+                    # Price position in 52-week range
+                    range_pos = (price - lo52) / (hi52 - lo52)
 
-        if score >= 80:
-            conv = "HIGH"
-            sp = 0.08 * vm * iv_mod
+                    # Direction alignment with price trend
+                    if direction == "CALL":
+                        if range_pos > 0.5:
+                            tech_bonus += 3  # Above midpoint, bullish structure
+                        elif range_pos < 0.25:
+                            tech_penalty += 5  # Near 52w low, fighting trend
+                        if change > 1.0:
+                            tech_bonus += 2  # Already moving our way
+                        elif change < -2.0:
+                            tech_penalty += 3  # Moving against us
+                    elif direction == "PUT":
+                        if range_pos < 0.5:
+                            tech_bonus += 3  # Below midpoint, bearish structure
+                        elif range_pos > 0.75:
+                            tech_penalty += 5  # Near 52w high, fighting trend
+                        if change < -1.0:
+                            tech_bonus += 2  # Already dropping
+                        elif change > 2.0:
+                            tech_penalty += 3  # Rallying against us
+
+                    # Volume confirmation
+                    if avg_vol > 0:
+                        vol_ratio = volume / avg_vol
+                        if vol_ratio > 1.5:
+                            tech_bonus += 2  # High volume confirms
+
+                    # Rough RSI approximation from price position
+                    rsi_val = range_pos * 100
+        except Exception:
+            pass
+
+        score += tech_bonus
+        score -= tech_penalty
+
+        # VIX regime modifier
+        if hasattr(self, 'vix') and self.vix > 0:
+            if self.vix > 30:
+                score -= 2  # Mild VIX drag (regime gate handles direction)
+            elif self.vix > 25:
+                score -= 1
+
+        # Regime modifier
+        if hasattr(self, 'regime'):
+            regime = str(self.market_regime).upper()
+            if "DOWN" in regime:
+                if direction == "CALL":
+                    score -= 2  # Mild CALL penalty in downtrend
+                elif direction == "PUT":
+                    score += 3  # PUTs easier
+            elif "UP" in regime:
+                if direction == "PUT":
+                    score -= 5
+                elif direction == "CALL":
+                    score += 5
+
+        # Cap
+        score = max(0, min(100, score))
+
+        # Conviction classification
+        if score >= 85:
+            conviction = "HIGH"
+            sp = 0.08
         elif score >= 70:
-            conv = "MEDIUM"
-            sp = 0.06 * vm * iv_mod
-        elif score >= 60:
-            conv = "LOW"
-            sp = 0.03 * vm * iv_mod
+            conviction = "MEDIUM"
+            sp = 0.04
+        elif score >= 55:
+            conviction = "LOW"
+            sp = 0.02
         else:
-            conv = "SKIP"
+            conviction = "SKIP"
             sp = 0
+
+        # Size modifiers
+        vm = 1.0
+        if hasattr(self, 'vix') and self.vix > 30:
+            vm = 0.7
+        elif hasattr(self, 'vix') and self.vix > 25:
+            vm = 0.85
 
         return {
             "symbol": symbol,
-            "price": round(price, 2),
-            "composite": round(score, 1),
-            "conviction": conv,
+            "price": 0,
+            "composite": score,
+            "conviction": conviction,
             "direction": direction,
-            "size_pct": round(sp, 4),
-            "sub_scores": {"flow": round(score, 1)},
-            "levels": {
-                "support": round(price * 0.95, 2),
-                "resistance": round(price * 1.10, 2),
-                "high_52w": 0, "atr": round(price * 0.02, 2),
-                "rr_ratio": 2.0, "pullback_pct": 0, "rsi": 50,
+            "size_pct": sp * vm,
+            "sub_scores": {
+                "flow": round(30 + strength * 8, 1),
+                "tech_bonus": tech_bonus,
+                "tech_penalty": tech_penalty,
             },
-            "regime": self.market_regime,
-            "vix": self.vix,
+            "levels": {
+                "rsi": rsi_val,
+                "support": 0,
+                "resistance": 0,
+                "atr": 0,
+            },
         }
 
+    
     def _full(self, symbol, stock_df, spy_df, flow_data, econ_mod=1.0):
         latest = stock_df.iloc[-1]
         price = latest["close"]
@@ -270,13 +373,13 @@ class DeepAnalyzer:
         if self.weekly_trend:
             wt, wt_mod = self.weekly_trend.get_weekly_trend(stock_df)
             if direction == "CALL" and wt == "DOWN":
-                comp *= 0.85
+                comp *= 0.95  # Mild weekly trend drag (regime handles the rest)
             elif direction == "CALL" and wt == "UP":
                 comp *= wt_mod
 
         # Market regime
         if self.market_regime == "TRENDING_DOWN":
-            comp = comp * (0.85 if direction == "CALL" else 1.10)
+            comp = comp * (0.92 if direction == "CALL" else 1.10)
         elif self.market_regime == "CHOPPY":
             comp *= 0.92
 

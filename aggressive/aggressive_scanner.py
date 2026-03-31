@@ -365,7 +365,7 @@ class AggressiveScanner:
                 logger.info(f"       {s['description']}")
 
             except Exception as e:
-                logger.debug(f"Error {sym}: {e}")
+                logger.warning(f"Error {sym}: {e}")
 
         # Sort by EV, not just conviction
         trades.sort(key=lambda x: x["ev"]["ev_dollar"], reverse=True)
@@ -389,6 +389,10 @@ class AggressiveScanner:
         }
 
         os.makedirs("config", exist_ok=True)
+        # Save candidates for replacement logic
+        import json as _json
+        _json.dump({"scan_date": rec.get("scan_date",""), "candidates": rec.get("trades",[])}, open("config/candidates.json","w"), indent=2)
+
         with open("config/aggressive_trades.json", "w") as f:
             json.dump(rec, f, indent=2, default=str)
 
@@ -472,5 +476,9 @@ class AggressiveScanner:
             "flow_signals": 0,
         }
         os.makedirs("config", exist_ok=True)
+        # Save candidates for replacement logic
+        import json as _json
+        _json.dump({"scan_date": rec.get("scan_date",""), "candidates": rec.get("trades",[])}, open("config/candidates.json","w"), indent=2)
+
         with open("config/aggressive_trades.json", "w") as f:
             json.dump(rec, f, indent=2, default=str)

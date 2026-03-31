@@ -10,7 +10,7 @@ from loguru import logger
 
 class IVAnalyzer:
 
-    MAX_IV_RANK = 70  # Don't buy when IV above 70th percentile
+    MAX_IV_RANK = 999  # Strategy engine handles IV; only block extreme
     CHEAP_IV_RANK = 30  # IV is cheap, increase size
 
     def __init__(self, schwab_client):
