@@ -192,7 +192,7 @@ class AggressiveScanner:
                 regime_gate = True
                 try:
                     regime = self.analyzer.regime if hasattr(self.analyzer, 'regime') else ""
-                    if "DOWN" in str(regime).upper() and vix > 25:
+                    if any(x in str(regime).upper() for x in ["DOWN", "UNKNOWN", "CHOPPY"]) and vix > 25:
                         if flow["direction"] == "CALL":
                             # Require price above 20-day SMA for calls in downtrend
                             df = price_cache.get(sym)
