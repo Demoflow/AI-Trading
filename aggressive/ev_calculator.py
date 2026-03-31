@@ -143,8 +143,28 @@ class EVCalculator:
         if stype == "NAKED_LONG":
             # Can make anywhere from 0 to unlimited
             # Use average expected gain based on targets
-            avg_win = max_profit * 0.65  # Average win is 65% of max
-            avg_loss = max_loss * 0.75  # Average loss is 75% of max
+            # Strategy-aware average win (Perplexity fix #4)
+            # Naked longs: rarely hit max profit, avg ~40% of max
+            # Debit spreads: often exit at 50-55% of max
+            # Credit spreads: usually hit close to max (premium collected)
+            stype = strategy.get("type", "NAKED_LONG") if isinstance(strategy, dict) else "NAKED_LONG"
+            if stype == "NAKED_LONG":
+                avg_win = max_profit * 0.40  # Realistic for naked longs
+            elif stype in ("DEBIT_SPREAD", "DIAGONAL_SPREAD"):
+                avg_win = max_profit * 0.50  # Exit at ~50% of max
+            elif stype in ("CREDIT_SPREAD", "SHORT_STRANGLE", "NAKED_PUT", "NAKED_CALL"):
+                avg_win = max_profit * 0.80  # Premium sellers keep most
+            else:
+                avg_win = max_profit * 0.45  # Default conservative  # Average win is 65% of max
+            # Strategy-aware average loss
+            if stype == "NAKED_LONG":
+                avg_loss = max_loss * 0.60  # Stop losses at ~60% of max
+            elif stype in ("DEBIT_SPREAD", "DIAGONAL_SPREAD"):
+                avg_loss = max_loss * 0.50  # Stop at 50% of cost
+            elif stype in ("CREDIT_SPREAD", "SHORT_STRANGLE"):
+                avg_loss = max_loss * 0.85  # Can blow past stops
+            else:
+                avg_loss = max_loss * 0.65  # Average loss is 75% of max
             ev = (prob_profit * avg_win * 100) - (prob_loss * avg_loss * 100)
 
         elif stype == "DEBIT_SPREAD":
@@ -194,7 +214,7 @@ class EVCalculator:
         if avg_loss > 0 and avg_win > 0:
             b = avg_win / avg_loss
             kelly = (b * prob_profit - prob_loss) / b
-            kelly = max(0, min(0.25, kelly))  # Cap at 25%
+            kelly = max(0, min(0.15, kelly * 0.33))  # 1/3 Kelly, max 15%
         else:
             kelly = 0
 

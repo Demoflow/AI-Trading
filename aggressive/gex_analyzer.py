@@ -70,7 +70,7 @@ class GEXAnalyzer:
                     # Call GEX: dealers are short calls = long gamma
                     # GEX = gamma * OI * 100 * spot_price
                     # Positive because dealers buy stock as price rises
-                    call_gex = gamma * oi * 100 * price / 1e6
+                    call_gex = gamma * oi * 100 * price**2 * 0.01 / 1e6
 
                     if strike not in gex_by_strike:
                         gex_by_strike[strike] = 0
@@ -100,7 +100,7 @@ class GEXAnalyzer:
 
                     # Put GEX: dealers are short puts = short gamma
                     # Negative because dealers sell stock as price falls
-                    put_gex = -gamma * oi * 100 * price / 1e6
+                    put_gex = -gamma * oi * 100 * price**2 * 0.01 / 1e6
 
                     if strike not in gex_by_strike:
                         gex_by_strike[strike] = 0
