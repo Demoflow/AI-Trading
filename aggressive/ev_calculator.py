@@ -215,7 +215,13 @@ class EVCalculator:
         if avg_loss > 0 and avg_win > 0:
             b = avg_win / avg_loss
             kelly = (b * prob_profit - prob_loss) / b
-            kelly = max(0, min(0.15, kelly * 0.33))  # 1/3 Kelly, max 15%
+            # Variable Kelly fraction based on EV grade
+            if ev > 100:  # Grade A+
+                kelly = max(0.02, min(0.10, kelly * 0.50))  # Half Kelly, max 10%
+            elif ev > 50:  # Grade A
+                kelly = max(0.02, min(0.08, kelly * 0.33))  # 1/3 Kelly, max 8%
+            else:  # Grade B/C
+                kelly = max(0.02, min(0.05, kelly * 0.25))  # 1/4 Kelly, max 5%
         else:
             kelly = 0
 

@@ -239,16 +239,25 @@ class DeepAnalyzer:
         # Cap
         score = max(0, min(100, score))
 
-        # Conviction classification
+        # Quality cap: low-priced stocks cannot reach HIGH conviction on flow alone
+        if stock_price > 0 and stock_price < 10:
+            score = min(75, score)  # Max MEDIUM conviction for penny stocks
+        elif stock_price > 0 and stock_price < 15:
+            score = min(82, score)  # Just below HIGH threshold
+
+        # Conviction classification with Kelly-proportional sizing
+        # Base size scales with conviction, then Kelly adjusts in EV calculator
         if score >= 85:
             conviction = "HIGH"
-            sp = 0.08
+            # Kelly-proportional: base 5%, Kelly multiplier applied downstream
+            # Strong signals: 5% base * Kelly fraction = 3-8% actual
+            sp = 0.05
         elif score >= 70:
             conviction = "MEDIUM"
-            sp = 0.04
+            sp = 0.03
         elif score >= 55:
             conviction = "LOW"
-            sp = 0.02
+            sp = 0.015
         else:
             conviction = "SKIP"
             sp = 0
@@ -409,7 +418,7 @@ class DeepAnalyzer:
 
         if comp >= 80:
             conv = "HIGH"
-            sp = 0.08 * vm * iv_mod * sector_mod
+            sp = 0.05  # Kelly-proportional base * vm * iv_mod * sector_mod
         elif comp >= 70:
             conv = "MEDIUM"
             sp = 0.06 * vm * iv_mod * sector_mod

@@ -191,13 +191,21 @@ class AggressiveScanner:
                 # MINIMUM PRICE FILTER: block penny stocks and low strikes
                 try:
                     _price = analysis.get("price", 0)
-                    if _price > 0 and _price < 8:
+                    # Get real price from quote if analysis price is 0
+                    if _price == 0:
+                        try:
+                            _pq = self.client.get_quote(sym)
+                            if _pq.status_code == 200:
+                                _price = _pq.json().get(sym, {}).get("quote", {}).get("lastPrice", 0)
+                        except Exception:
+                            pass
+                    if 0 < _price < 10:  # Min stock price $10
                         skipped["filter"] += 1
                         continue
                     _contracts = analysis.get("contracts", strategy.get("contracts", []) if 'strategy' in dir() else [])
                     for _c in _contracts:
                         _strike = _c.get("strike", 0)
-                        if _strike > 0 and _strike < 5:
+                        if 0 < _strike < 8:  # Min strike $8
                             skipped["filter"] += 1
                             continue
                 except Exception:
@@ -397,6 +405,7 @@ class AggressiveScanner:
             "regime": self.analyzer.market_regime,
             "trades": trades,
             "total_cost": total_cost,
+                    "kelly_size_pct": ev_result.get("kelly_size_pct", 5.0),
             "deployment_pct": round(total_cost / self.equity * 100, 1),
             "skipped": skipped,
             "universe_size": len(symbols),

@@ -19,7 +19,7 @@ from loguru import logger
 
 class StrategyEngine:
     # Calendar spreads disabled until valuation/exit bugs are fixed
-    BLOCKED_STRATEGIES = {"CALENDAR_SPREAD", "BROKEN_WING_BUTTERFLY", "RISK_REVERSAL", "RATIO_BACKSPREAD"}
+    BLOCKED_STRATEGIES = {"CALENDAR_SPREAD", "RISK_REVERSAL", "RATIO_BACKSPREAD"}  # BWB unblocked for catalyst plays
 
 
     def __init__(self, schwab_client):
@@ -358,9 +358,29 @@ class StrategyEngine:
                 elif stype in preferred:
                     s['score'] = s.get('score', 0) + 15
             # Re-sort after penalty
-            # Remove blocked strategies
+            strategies.sort(key=lambda x: x.get('score', 0), reverse=True)
+        except Exception:
+            pass
+
+        # Remove blocked strategies
         strategies = [s for s in strategies if s.get("type") not in self.BLOCKED_STRATEGIES]
-        strategies.sort(key=lambda x: x.get('score', 0), reverse=True)
+        if not strategies:
+            return None
+
+        # If vol regime prefers spreads but only NAKED_LONG available,
+        # reduce its score to reflect suboptimal strategy selection
+        try:
+            from aggressive.vol_strategy import VolatilityStrategySelector
+            _vq = self.client.get_quote("$VIX") if hasattr(self, 'client') else None
+            _vix = _vq.json().get("$VIX", {}).get("quote", {}).get("lastPrice", 20) if _vq and _vq.status_code == 200 else 20
+            if _vix > 25:
+                # In elevated VIX, naked longs are buying expensive premium
+                for s in strategies:
+                    if s.get("type") == "NAKED_LONG":
+                        s["score"] = max(0, s.get("score", 0) - 15)
+                        s["vol_penalty"] = "elevated_vix_naked"
+                # Re-sort
+                strategies.sort(key=lambda x: x.get("score", 0), reverse=True)
         except Exception:
             pass
 
