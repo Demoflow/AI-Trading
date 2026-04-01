@@ -48,8 +48,12 @@ def keepalive():
             logger.warning(f"API returned {resp.status_code}")
             return False
     except Exception as e:
-        logger.error(f"Keepalive failed: {e}")
-        logger.error("Re-authenticate: python scripts/authenticate_schwab.py")
+        if "refresh_token_authentication_error" in str(e):
+            logger.critical("Schwab refresh token EXPIRED (7-day limit). Must re-authenticate!")
+            logger.critical("Run: python scripts/authenticate_schwab.py")
+        else:
+            logger.error(f"Keepalive failed: {e}")
+            logger.error("Re-authenticate: python scripts/authenticate_schwab.py")
         return False
 
 

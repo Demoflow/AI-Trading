@@ -1,0 +1,20 @@
+{
+  "date": "2026-04-01",
+  "actions": [
+    {
+      "symbol": "LMT",
+      "action": "HOLD",
+      "reason": "Up +56% ($974 profit). T1 auto-exit will trigger tomorrow if still above +50%.",
+      "current_pct": 22.9,
+      "target_pct": 0
+    },
+    {
+      "symbol": "BMY",
+      "action": "MONITOR",
+      "reason": "Up +27% ($392 profit). 5 contracts = 16% of equity. T1 at +50% will auto-sell.",
+      "current_pct": 16.1,
+      "target_pct": 10
+    }
+  ],
+  "notes": "LMT will auto-exit at T1 (+50%) tomorrow. BMY needs manual trim if it reaches 5 contracts * $4+ = $2000+."
+}

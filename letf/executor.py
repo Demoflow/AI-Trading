@@ -4,7 +4,7 @@ LETF Executor - Buy/sell leveraged ETF shares on Schwab.
 import json
 import time
 import httpx
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from loguru import logger
 
 CONFIG_PATH = "config/letf_config.json"
@@ -18,13 +18,17 @@ class LETFExecutor:
         self.live = live
         self.config_path = config_path
         self.portfolio_path = portfolio_path
-        self.config = json.load(open(config_path))
+        self._api_fail_count = 0
+        self._api_backoff_until = None
+        with open(config_path) as _f:
+            self.config = json.load(_f)
         self.account_hash = self.config["account_hash"]
         self._load_portfolio()
 
     def _load_portfolio(self):
         try:
-            self.portfolio = json.load(open(self.portfolio_path))
+            with open(self.portfolio_path) as _f:
+                self.portfolio = json.load(_f)
         except FileNotFoundError:
             self.portfolio = {
                 "equity": self.config["equity"],
@@ -34,10 +38,35 @@ class LETFExecutor:
             self._save_portfolio()
 
     def _save_portfolio(self):
-        json.dump(self.portfolio, open(self.portfolio_path, "w"), indent=2)
+        with open(self.portfolio_path, "w") as _f:
+            json.dump(self.portfolio, _f, indent=2)
+
+    def _is_api_available(self):
+        if self._api_backoff_until and datetime.now() < self._api_backoff_until:
+            return False
+        if self._api_backoff_until:
+            self._api_backoff_until = None
+            self._api_fail_count = 0
+        return True
+
+    def _record_api_failure(self, e):
+        err_str = str(e)
+        if "refresh_token_authentication_error" in err_str:
+            logger.critical("SCHWAB TOKEN EXPIRED - run: python scripts/authenticate_schwab.py")
+            self._api_backoff_until = datetime.now() + timedelta(hours=24)
+            self._api_fail_count = 999
+            return
+        self._api_fail_count += 1
+        if self._api_fail_count >= 5:
+            self._api_backoff_until = datetime.now() + timedelta(minutes=5)
+            logger.warning(f"API unreachable after {self._api_fail_count} attempts - backing off 5min.")
+        else:
+            logger.error(f"Balance error ({self._api_fail_count}/5): {e}")
 
     def get_real_balance(self):
         """Get real balance from Schwab PCRA."""
+        if not self._is_api_available():
+            return None
         try:
             r = self.client.get_account_numbers()
             accounts = r.json()
@@ -57,6 +86,8 @@ class LETFExecutor:
             unsettled = cash - avail if cash > avail else 0
             if unsettled > 0:
                 logger.info(f"Settlement: cash=${cash:,.2f} available=${avail:,.2f} unsettled=${unsettled:,.2f}")
+            self._api_fail_count = 0
+            self._api_backoff_until = None
             return {
                 "cash": cash,
                 "equity": bal.get("liquidationValue", 0),
@@ -64,7 +95,7 @@ class LETFExecutor:
                 "unsettled": unsettled,
             }
         except Exception as e:
-            logger.error(f"Balance error: {e}")
+            self._record_api_failure(e)
             return None
 
     def can_enter(self, cost):

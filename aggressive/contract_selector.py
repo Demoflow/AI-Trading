@@ -8,6 +8,7 @@ from loguru import logger
 
 
 class ContractSelector:
+    MIN_SPREAD_WIDTH = 5  # Minimum $5 wide spreads
 
     TARGET_DELTA_LOW = 0.40
     TARGET_DELTA_HIGH = 0.65

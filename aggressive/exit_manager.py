@@ -114,12 +114,13 @@ class ExitManager:
         if pnl_pct >= profit_t1 and not pos.get("t1_hit"):
             pos["t1_hit"] = True
             if not pos.get("_t1_alerted"):
-                if sym not in ExitManager._t1_alerts_fired:
-                    logger.info(f"  T1 HIT: {pos.get('underlying','?')} +{pnl_pct:.0%} - consider scaling out")
-                    ExitManager._t1_alerts_fired.add(sym)
+                _sym = pos.get("underlying", "?")
+                if _sym not in ExitManager._t1_alerts_fired:
+                    logger.info(f"  T1 HIT: {_sym} +{pnl_pct:.0%} - consider scaling out")
+                    ExitManager._t1_alerts_fired.add(_sym)
                 pos["_t1_alerted"] = True
 
-        return False, "hold"
+        return True, f"T1_profit_{pnl_pct:+.0%}"  # Auto-exit at T1
 
     def _exit_debit_spread(self, pos, current_val, tm, days):
         """

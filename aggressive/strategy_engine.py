@@ -18,6 +18,9 @@ from loguru import logger
 
 
 class StrategyEngine:
+    # Calendar spreads disabled until valuation/exit bugs are fixed
+    BLOCKED_STRATEGIES = {"CALENDAR_SPREAD", "BROKEN_WING_BUTTERFLY", "RISK_REVERSAL", "RATIO_BACKSPREAD"}
+
 
     def __init__(self, schwab_client):
         self.client = schwab_client
@@ -355,7 +358,9 @@ class StrategyEngine:
                 elif stype in preferred:
                     s['score'] = s.get('score', 0) + 15
             # Re-sort after penalty
-            strategies.sort(key=lambda x: x.get('score', 0), reverse=True)
+            # Remove blocked strategies
+        strategies = [s for s in strategies if s.get("type") not in self.BLOCKED_STRATEGIES]
+        strategies.sort(key=lambda x: x.get('score', 0), reverse=True)
         except Exception:
             pass
 

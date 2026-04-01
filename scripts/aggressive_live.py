@@ -319,6 +319,21 @@ def run(paper=True):
                 except Exception:
                     pass
 
+                # MAX POSITION SIZE CHECK
+                MAX_POSITION_PCT = 0.10
+                _trade_cost = trade.get("strategy", {}).get("total_cost", 500)
+                _equity = 7611  # Updated daily by sync
+                try:
+                    _summ2 = executor.get_live_summary()
+                    if _summ2:
+                        _equity = _summ2.get("equity", 7611)
+                except Exception:
+                    pass
+                if _trade_cost > _equity * MAX_POSITION_PCT:
+                    logger.warning(f"SIZE BLOCK: {sym} cost ${_trade_cost:.0f} > {MAX_POSITION_PCT:.0%} of ${_equity:.0f}")
+                    trade["_rejected"] = True
+                    continue
+
                 should_buy, limit, reason = smart.should_enter(
                     sym, direction, csym
                 )
@@ -358,7 +373,7 @@ def run(paper=True):
                         logger.info(f"ENTERED: {sym}")
                     # Mark trade as entered in the file so restarts don't re-enter
                     trade["_entered"] = True
-                    trade["_entered_time"] = str(_dt.datetime.now())
+                    trade["_entered_time"] = str(datetime.now())
                     try:
                         _tf = json.load(open("config/aggressive_trades.json"))
                         for _t in _tf.get("trades", []):
@@ -442,7 +457,7 @@ def run(paper=True):
                     _et = pos.get("entry_time","")
                     if _et:
                         try:
-                            _etd = _dt.datetime.fromisoformat(_et) if isinstance(_et,str) else _et
+                            _etd = datetime.fromisoformat(_et) if isinstance(_et,str) else _et
                             if (_dt.datetime.now()-_etd).total_seconds() < 120:
                                 continue
                         except: pass
@@ -622,10 +637,10 @@ def run(paper=True):
                                 if g_exit:
                                     result = executor.close_position_live(pos_for_exit)
                                     logger.info(f"GREEKS EXIT: {sym} {g_reason} -> {result.get('status')}")
+                                    if result.get("status") == "FILLED":
+                                        acct_mgr.record_trade(sym, "LONG", "NAKED_LONG", entry_cost, current_total, current_total - entry_cost)
                         except Exception:
                             pass
-                            if result.get("status") == "FILLED":
-                                acct_mgr.record_trade(sym, "LONG", "NAKED_LONG", entry_cost, current_total, current_total - entry_cost)
 
                 elif short_legs:
                     # SHORT position (premium sold)

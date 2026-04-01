@@ -188,6 +188,21 @@ class AggressiveScanner:
                     skipped["low_score"] += 1
                     continue
 
+                # MINIMUM PRICE FILTER: block penny stocks and low strikes
+                try:
+                    _price = analysis.get("price", 0)
+                    if _price > 0 and _price < 8:
+                        skipped["filter"] += 1
+                        continue
+                    _contracts = analysis.get("contracts", strategy.get("contracts", []) if 'strategy' in dir() else [])
+                    for _c in _contracts:
+                        _strike = _c.get("strike", 0)
+                        if _strike > 0 and _strike < 5:
+                            skipped["filter"] += 1
+                            continue
+                except Exception:
+                    pass
+
                 # REGIME GATE: In downtrends with high VIX, filter aggressively
                 regime_gate = True
                 try:

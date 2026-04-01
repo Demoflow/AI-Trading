@@ -17,7 +17,7 @@ import os
 import json
 import shutil
 import httpx
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 BUY_SLIPPAGE = 0.03
 SELL_SLIPPAGE = 0.015
@@ -36,6 +36,9 @@ class OptionsExecutor:
         self.account_hash = account_hash
         self.paper_mode = paper_mode
 
+        self._api_fail_count = 0
+        self._api_backoff_until = None
+
         if paper_mode:
             logger.info("EXECUTOR: Paper mode (Level 3 enabled) (multi-leg)")
             self.paper_positions = self._load_paper()
@@ -43,17 +46,51 @@ class OptionsExecutor:
         else:
             logger.info("EXECUTOR: LIVE mode (multi-leg)")
 
+    def _is_api_available(self):
+        """Returns False during circuit breaker backoff."""
+        if self._api_backoff_until and datetime.now() < self._api_backoff_until:
+            return False
+        if self._api_backoff_until:
+            self._api_backoff_until = None
+            self._api_fail_count = 0
+        return True
+
+    def _record_api_failure(self, e):
+        """Track failures and activate circuit breaker after threshold."""
+        err_str = str(e)
+        if "refresh_token_authentication_error" in err_str:
+            logger.critical("SCHWAB TOKEN EXPIRED - must re-authenticate!")
+            logger.critical("Run: python scripts/authenticate_schwab.py")
+            self._api_backoff_until = datetime.now() + timedelta(hours=24)
+            self._api_fail_count = 999
+            return
+        self._api_fail_count += 1
+        if self._api_fail_count >= 5:
+            backoff_mins = 5
+            self._api_backoff_until = datetime.now() + timedelta(minutes=backoff_mins)
+            logger.warning(
+                f"API unreachable after {self._api_fail_count} attempts - "
+                f"backing off {backoff_mins}min. Check network/VPN."
+            )
+        else:
+            logger.error(f"Failed to get account hash ({self._api_fail_count}/5): {e}")
+
     def _get_account_hash(self):
         """Always fetch dynamic account hash from Schwab API."""
+        if not self._is_api_available():
+            return self.account_hash
         try:
             r0 = self.client.get_account_numbers()
             accounts = r0.json()
+            self._api_fail_count = 0
+            self._api_backoff_until = None
+            acct_num = os.getenv("SCHWAB_ACCOUNT_NUMBER", "28135437")
             for a in accounts:
-                if a["accountNumber"] == "28135437":
+                if a["accountNumber"] == acct_num:
                     return a["hashValue"]
             return accounts[-1]["hashValue"]
         except Exception as e:
-            logger.error(f"Failed to get account hash: {e}")
+            self._record_api_failure(e)
             return self.account_hash  # fallback to init value
 
     def _load_paper(self):
@@ -531,6 +568,8 @@ class OptionsExecutor:
 
     def get_live_positions(self):
         """Get open positions from Schwab account."""
+        if not self._is_api_available():
+            return []
         try:
             ah = self._get_account_hash()
             from schwab.client import Client
@@ -539,6 +578,8 @@ class OptionsExecutor:
                 return []
             data = resp.json()
             positions = data.get("securitiesAccount", {}).get("positions", [])
+            self._api_fail_count = 0
+            self._api_backoff_until = None
             result = []
             for p in positions:
                 inst = p.get("instrument", {})
@@ -556,11 +597,13 @@ class OptionsExecutor:
                 })
             return result
         except Exception as e:
-            logger.error(f"Get positions error: {e}")
+            self._record_api_failure(e)
             return []
 
     def get_live_summary(self):
         """Get account summary from Schwab."""
+        if not self._is_api_available():
+            return None
         try:
             ah = self._get_account_hash()
             from schwab.client import Client
@@ -571,6 +614,8 @@ class OptionsExecutor:
             acct = data.get("securitiesAccount", {})
             bal = acct.get("currentBalances", {})
             positions = acct.get("positions", [])
+            self._api_fail_count = 0
+            self._api_backoff_until = None
             option_positions = [p for p in positions if p.get("instrument", {}).get("assetType") == "OPTION"]
             return {
                 "cash": bal.get("cashBalance", 0),
@@ -579,7 +624,7 @@ class OptionsExecutor:
                 "total_pnl": sum(p.get("currentDayProfitLoss", 0) for p in option_positions),
             }
         except Exception as e:
-            logger.error(f"Get summary error: {e}")
+            self._record_api_failure(e)
             return None
 
     def get_summary(self):
