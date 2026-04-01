@@ -708,8 +708,8 @@ class ContractPicker:
             call_map = chain.get("callExpDateMap", {})
             
             # Get first expiration (0DTE)
-            put_exp = next(iter(put_map.values()), {}) if put_map else {}
-            call_exp = next(iter(call_map.values()), {}) if call_map else {}
+            put_exp = next((v for k, v in put_map.items() if int(k.split(":")[1]) == 0), {})
+            call_exp = next((v for k, v in call_map.items() if int(k.split(":")[1]) == 0), {})
             
             if not put_exp or not call_exp:
                 return None

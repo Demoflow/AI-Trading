@@ -333,6 +333,7 @@ class RealtimeDataEngine:
 
         return {
             "symbol": symbol, "price": round(price, 2),
+            "session_open": sc[0]["open"] if sc else price,
             "time": datetime.now(),
             "candle_count": builder.candle_count(),
             "ema9": ema9, "ema21": ema21,
