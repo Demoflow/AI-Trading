@@ -79,6 +79,11 @@ def run():
     gex = IntradayGEX(client)
     internals = MarketInternals(client)
 
+    # Clean up any stale positions from previous days
+    expired = executor.expire_stale_positions()
+    if expired:
+        logger.info(f"Cleaned up {expired} expired positions from previous days")
+
     # VIX
     vix = 20
     try:
@@ -108,6 +113,27 @@ def run():
     while True:
         now = datetime.now()
         h = now.hour + now.minute / 60.0
+
+        # Force-close all positions at 3:45 PM (15 min before close)
+        if 15.65 <= h < 15.75 and cycle > 0:
+            open_pos = executor.get_open_positions()
+            if open_pos:
+                logger.warning(f"3:45 PM FORCE CLOSE: {len(open_pos)} positions")
+                for pos in open_pos:
+                    csym = pos.get("contract", "")
+                    if csym:
+                        current = get_option_value(client, csym)
+                        if current is not None:
+                            result = executor.close_position(pos["id"], current)
+                            if result["status"] == "CLOSED":
+                                risk.open_positions -= 1
+                                logger.info(f"FORCE CLOSED: {pos['symbol']} P&L=${result['pnl']:+,.2f}")
+                        else:
+                            # Can't get price, close at 0 (expired worthless)
+                            result = executor.close_position(pos["id"], 0.01)
+                            if result["status"] == "CLOSED":
+                                risk.open_positions -= 1
+                                logger.warning(f"FORCE CLOSED (no quote): {pos['symbol']}")
 
         if now.weekday() >= 5 or h < 8.4 or h >= 15.1:
             if h >= 15.1 and cycle > 0:
@@ -230,6 +256,11 @@ def run():
 
         # â”€â”€ CHECK SIGNALS â”€â”€
         can_trade, trade_reason = risk.can_trade()
+        # No new entries after 3:30 PM or before 9:35 AM
+        if h >= 15.5:
+            can_trade = False
+        if h < 8.58:  # 9:35 AM (skip opening 5 minutes)
+            can_trade = False
         if can_trade and allowed:
             for sym in ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL", "AMD", "NFLX", "COIN", "BA", "JPM", "XOM"]:
                 snap_5m = data_engine.get_snapshot(sym)

@@ -186,6 +186,59 @@ class ScalperExecutor:
                 return {"status": "CLOSED", "pnl": pnl}
         return {"status": "NOT_FOUND"}
 
+    def expire_stale_positions(self):
+        """Expire any 0DTE positions from previous days."""
+        today = date.today().isoformat()
+        expired = []
+        for pos in self.portfolio["positions"]:
+            if pos["status"] != "OPEN":
+                continue
+            entry_date = pos.get("entry_time", "")[:10]
+            if entry_date and entry_date < today:
+                # Position from a previous day — expired worthless for buys,
+                # max profit for premium sells
+                structure = pos.get("structure", "LONG_OPTION")
+                if structure in ("NAKED_PUT", "NAKED_CALL", "CREDIT_SPREAD", "STRADDLE", "STRANGLE"):
+                    # Premium sell expired OTM = keep premium (best case)
+                    # But we need to check if it expired ITM
+                    pnl = pos.get("credit_received", 0)  # Best case: keep all premium
+                    self.portfolio["cash"] += pos["entry_cost"]  # Return collateral
+                    logger.info(f"EXPIRED (premium sell): {pos['symbol']} {structure} +${pnl:,.2f} (kept premium)")
+                else:
+                    # Long option expired worthless
+                    pnl = -pos["entry_cost"]
+                    logger.info(f"EXPIRED WORTHLESS: {pos['symbol']} {structure} -${pos['entry_cost']:,.2f}")
+
+                pos["status"] = "CLOSED"
+                pos["exit_price"] = 0
+                pos["exit_time"] = f"{entry_date}T16:00:00"
+                pos["pnl"] = round(pnl, 2)
+                pos["pnl_pct"] = round(pnl / max(pos["entry_cost"], 1) * 100, 1)
+                pos["exit_reason"] = "EXPIRED_0DTE"
+                self.portfolio["history"].append(pos)
+                expired.append(pos["id"])
+
+                # Update daily stats for the entry date
+                if entry_date not in self.portfolio["daily_stats"]:
+                    self.portfolio["daily_stats"][entry_date] = {
+                        "trades": 0, "wins": 0, "losses": 0, "pnl": 0
+                    }
+                s = self.portfolio["daily_stats"][entry_date]
+                s["trades"] += 1
+                s["pnl"] += pnl
+                if pnl > 0:
+                    s["wins"] += 1
+                else:
+                    s["losses"] += 1
+
+        if expired:
+            self.portfolio["positions"] = [
+                p for p in self.portfolio["positions"] if p.get("id") not in expired
+            ]
+            self._save()
+            logger.info(f"Expired {len(expired)} stale positions from previous days")
+        return len(expired)
+
     def get_open_positions(self):
         return [p for p in self.portfolio["positions"] if p["status"] == "OPEN"]
 
