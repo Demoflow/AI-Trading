@@ -390,3 +390,56 @@ class ScalperExecutor:
             "total_pnl": round(sum(t.get("pnl", 0) for t in h), 2),
             "win_rate": round(len(wins) / max(len(h), 1), 2),
         }
+
+    def open_iron_condor_position(self, signal, condor):
+        """Open a 4-leg iron condor position."""
+        if not condor:
+            return {"status": "REJECTED"}
+        collateral = condor["collateral"]
+        total_credit = condor["total_credit"]
+        qty = condor.get("qty", 1)
+        credit_received = round(qty * total_credit * (1 - SELL_SLIPPAGE) * 100, 2)
+
+        if collateral > self.portfolio["cash"]:
+            return {"status": "REJECTED", "reason": "no_cash"}
+
+        # Cap at 20% of equity
+        if collateral > self.equity * 0.20:
+            return {"status": "REJECTED", "reason": "collateral_exceeds_20%"}
+
+        self.portfolio["cash"] -= collateral
+        self.portfolio["cash"] += credit_received
+
+        pos = {
+            "id": len(self.portfolio["positions"]) + len(self.portfolio["history"]) + 1,
+            "symbol": signal["symbol"],
+            "direction": "NEUTRAL",
+            "signal_type": signal["type"],
+            "structure": "IRON_CONDOR",
+            "confidence": signal["confidence"],
+            "contract": condor["short_put"]["symbol"],       # Short put
+            "contract_long_put": condor["long_put"]["symbol"],
+            "contract_short_call": condor["short_call"]["symbol"],
+            "contract_long_call": condor["long_call"]["symbol"],
+            "strike_short_put": condor["short_put"]["strike"],
+            "strike_long_put": condor["long_put"]["strike"],
+            "strike_short_call": condor["short_call"]["strike"],
+            "strike_long_call": condor["long_call"]["strike"],
+            "entry_cost": round(collateral, 2),
+            "credit_received": credit_received,
+            "qty": qty,
+            "entry_time": datetime.now().isoformat(),
+            "entry_underlying": signal["price"],
+            "status": "OPEN",
+            "peak_value": collateral,
+            "reason": signal.get("reason", ""),
+        }
+        self.portfolio["positions"].append(pos)
+        self._save()
+        logger.info(
+            f"IRON CONDOR: {signal['symbol']} "
+            f"put ${condor['short_put']['strike']}/{condor['long_put']['strike']} "
+            f"call ${condor['short_call']['strike']}/{condor['long_call']['strike']} "
+            f"cr=${credit_received:,.2f} collateral=${collateral:,.2f}"
+        )
+        return {"status": "FILLED", "collateral": collateral}

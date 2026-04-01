@@ -1,15 +1,9 @@
 @echo off
-title LETF Roth IRA - Dad's Account
-color 0D
 echo ============================================================
-echo   LEVERAGED ETF SWING - DAD'S ROTH IRA
+echo LETF SWING SYSTEM - ROTH IRA
 echo ============================================================
-echo.
 cd /d C:\Users\User\Desktop\trading_system
+docker start timescaledb 2>nul
 call venv\Scripts\activate
-python scripts\letf_roth_live.py --live
-echo.
-echo ============================================================
-echo   SESSION COMPLETE
-echo ============================================================
+python scripts/letf_roth_live.py --live
 pause

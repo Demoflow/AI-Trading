@@ -689,3 +689,123 @@ class ContractPicker:
                 f"${best['long']['strike']} cr=${best['credit']} x{best['qty']}"
             )
         return best
+
+    def pick_iron_condor(self, symbol, max_cost, atr):
+        """Pick both legs of an iron condor: bull put spread + bear call spread."""
+        try:
+            import time
+            time.sleep(0.08)
+            r = self.client.get_option_chain(symbol, strike_count=20)
+            if r.status_code != 200:
+                return None
+            chain = r.json()
+            underlying_price = chain.get("underlyingPrice", 0)
+            if underlying_price <= 0:
+                return None
+
+            # Find 0DTE expiration
+            put_map = chain.get("putExpDateMap", {})
+            call_map = chain.get("callExpDateMap", {})
+            
+            # Get first expiration (0DTE)
+            put_exp = next(iter(put_map.values()), {}) if put_map else {}
+            call_exp = next(iter(call_map.values()), {}) if call_map else {}
+            
+            if not put_exp or not call_exp:
+                return None
+
+            # PUT SIDE: sell OTM put, buy further OTM put
+            # Target: sell at delta ~0.15, buy at delta ~0.08
+            put_candidates = []
+            for strike_str, contracts in put_exp.items():
+                c = contracts[0] if contracts else {}
+                strike = float(strike_str)
+                delta = abs(c.get("delta", 0))
+                bid = c.get("bid", 0)
+                ask = c.get("ask", 0)
+                oi = c.get("openInterest", 0)
+                mid = (bid + ask) / 2 if bid > 0 and ask > 0 else 0
+                if mid > 0 and oi >= 100 and strike < underlying_price:
+                    put_candidates.append({
+                        "strike": strike, "delta": delta, "mid": mid,
+                        "bid": bid, "ask": ask, "symbol": c.get("symbol", ""),
+                    })
+            
+            # CALL SIDE: sell OTM call, buy further OTM call
+            call_candidates = []
+            for strike_str, contracts in call_exp.items():
+                c = contracts[0] if contracts else {}
+                strike = float(strike_str)
+                delta = abs(c.get("delta", 0))
+                bid = c.get("bid", 0)
+                ask = c.get("ask", 0)
+                oi = c.get("openInterest", 0)
+                mid = (bid + ask) / 2 if bid > 0 and ask > 0 else 0
+                if mid > 0 and oi >= 100 and strike > underlying_price:
+                    call_candidates.append({
+                        "strike": strike, "delta": delta, "mid": mid,
+                        "bid": bid, "ask": ask, "symbol": c.get("symbol", ""),
+                    })
+
+            if len(put_candidates) < 2 or len(call_candidates) < 2:
+                return None
+
+            # Sort puts by strike descending (closest to ATM first)
+            put_candidates.sort(key=lambda x: x["strike"], reverse=True)
+            # Sort calls by strike ascending (closest to ATM first)
+            call_candidates.sort(key=lambda x: x["strike"])
+
+            # Select short put: delta closest to 0.15
+            short_put = min(put_candidates, key=lambda x: abs(x["delta"] - 0.15))
+            # Select long put: next strike below short put
+            long_puts = [p for p in put_candidates if p["strike"] < short_put["strike"]]
+            if not long_puts:
+                return None
+            long_put = long_puts[0]  # Closest strike below
+
+            # Select short call: delta closest to 0.15
+            short_call = min(call_candidates, key=lambda x: abs(x["delta"] - 0.15))
+            # Select long call: next strike above short call
+            long_calls = [c for c in call_candidates if c["strike"] > short_call["strike"]]
+            if not long_calls:
+                return None
+            long_call = long_calls[0]  # Closest strike above
+
+            # Calculate credit and collateral
+            put_credit = short_put["mid"] - long_put["mid"]
+            call_credit = short_call["mid"] - long_call["mid"]
+            total_credit = put_credit + call_credit
+
+            if total_credit <= 0.10:
+                return None  # Not enough credit
+
+            put_width = short_put["strike"] - long_put["strike"]
+            call_width = long_call["strike"] - short_call["strike"]
+            max_width = max(put_width, call_width)
+            collateral = max_width * 100  # Only one side can lose
+
+            if collateral > max_cost:
+                return None
+
+            from loguru import logger
+            logger.info(
+                f"IC: {symbol} put ${short_put['strike']}/{long_put['strike']} "
+                f"call ${short_call['strike']}/{long_call['strike']} "
+                f"cr=${total_credit:.2f} collateral=${collateral:.0f}"
+            )
+
+            return {
+                "short_put": short_put,
+                "long_put": long_put,
+                "short_call": short_call,
+                "long_call": long_call,
+                "put_credit": round(put_credit, 2),
+                "call_credit": round(call_credit, 2),
+                "total_credit": round(total_credit, 2),
+                "collateral": collateral,
+                "qty": 1,
+            }
+        except Exception as e:
+            from loguru import logger
+            logger.warning(f"IC pick error {symbol}: {e}")
+            return None

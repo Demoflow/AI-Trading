@@ -236,13 +236,41 @@ def run():
             csym = pos.get("contract", "")
             if not csym:
                 continue
-            current = get_option_value(client, csym)
-            if current is None:
-                continue
-            current_value = current * pos["qty"] * 100
+            structure = pos.get("structure", "LONG_OPTION")
+
+            # For spreads/condors, calculate net value from all legs
+            if structure in ("CREDIT_SPREAD", "IRON_CONDOR"):
+                short_val = get_option_value(client, csym)
+                if short_val is None:
+                    continue
+                # Credit spread: net value = short_leg - long_leg
+                long_sym = pos.get("contract_long", pos.get("contract_long_put", ""))
+                if long_sym:
+                    long_val = get_option_value(client, long_sym)
+                    if long_val is not None:
+                        current = short_val - long_val  # Net spread value
+                    else:
+                        current = short_val
+                else:
+                    current = short_val
+                # For IC, also add call side
+                if structure == "IRON_CONDOR":
+                    sc_sym = pos.get("contract_short_call", "")
+                    lc_sym = pos.get("contract_long_call", "")
+                    if sc_sym and lc_sym:
+                        sc_val = get_option_value(client, sc_sym)
+                        lc_val = get_option_value(client, lc_sym)
+                        if sc_val is not None and lc_val is not None:
+                            current += (sc_val - lc_val)
+                current_value = abs(current) * pos["qty"] * 100
+            else:
+                current = get_option_value(client, csym)
+                if current is None:
+                    continue
+                current_value = current * pos["qty"] * 100
             if current_value > pos.get("peak_value", 0):
                 pos["peak_value"] = current_value
-                executor._save()
+                # Don't save here — batch save at end of exit loop
 
             should_exit, reason, action = risk.check_exit(pos, current_value)
             if should_exit:
@@ -322,7 +350,17 @@ def run():
                         else:
                             logger.info("  No contract")
 
-                    elif structure in ("CREDIT_SPREAD", "IRON_CONDOR"):
+                    elif structure == "IRON_CONDOR":
+                        condor = picker.pick_iron_condor(
+                            sym, max_cost, snap_5m.get("atr", 1),
+                        )
+                        if condor:
+                            result = executor.open_iron_condor_position(signal, condor)
+                            if result["status"] == "FILLED":
+                                risk.open_positions += 1
+                        else:
+                            logger.info("  No iron condor")
+                    elif structure == "CREDIT_SPREAD":
                         spread = picker.pick_credit_spread(
                             sym, signal["direction"], max_cost,
                             snap_5m.get("atr", 1),

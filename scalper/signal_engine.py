@@ -190,6 +190,11 @@ class ScalperSignal:
             return None
         if abs(snap["vwap_pct"]) > 0.12:
             return None
+        # ATR-relative move check: block IC on gap/volatile days
+        atr = snap.get("atr", 1)
+        day_move = abs(snap.get("price", 0) - snap.get("open", snap.get("price", 0)))
+        if atr > 0 and day_move / atr > 1.5:
+            return None
         if snap["rsi"] < 35 or snap["rsi"] > 65:
             return None
 
