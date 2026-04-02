@@ -180,7 +180,7 @@ def run(paper=True):
         from datetime import date as _d
         today = _d.today().isoformat()
         try:
-            _ah = client.get_account_numbers().json()[1]["hashValue"]
+            _ah = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")
             _orders = client.get_orders_for_account(_ah).json()
             for o in _orders:
                 if o.get("status") != "FILLED":
@@ -236,6 +236,14 @@ def run(paper=True):
         return
 
     executed = set()
+    # Track entry dates for live positions (for max_hold_days)
+    _entry_dates = {}
+    _peak_pnl = {}  # Track peak P&L % per symbol for trailing stops
+    try:
+        import json as _j
+        _entry_dates = _j.load(open("config/entry_dates.json"))
+    except Exception:
+        pass
     # Skip trades already marked as entered from previous runs
     for t in trades:
         if t.get("_entered") or t.get("_rejected"):
@@ -331,7 +339,7 @@ def run(paper=True):
                 # MAX POSITION SIZE CHECK
                 MAX_POSITION_PCT = 0.10
                 _trade_cost = trade.get("strategy", {}).get("total_cost", 500)
-                _equity = 7611  # Updated daily by sync
+                _equity = executor.get_live_summary().get("equity", 7500) if not paper else 7500
                 try:
                     _summ2 = executor.get_live_summary()
                     if _summ2:
@@ -380,8 +388,25 @@ def run(paper=True):
                     if result.get("status") in ("SUBMITTED", "FILLED"):
                         executed.add(sym)
                         logger.info(f"ENTERED: {sym}")
-                    # Mark trade as entered in the file so restarts don't re-enter
-                    trade["_entered"] = True
+                        # Track entry date
+                        from datetime import date
+                        _entry_dates[sym] = date.today().isoformat()
+                        try:
+                            json.dump(_entry_dates, open("config/entry_dates.json", "w"), indent=2)
+                        except Exception:
+                            pass
+                        # Mark trade as entered
+                        trade["_entered"] = True
+                        trade["_entered_time"] = str(datetime.now())
+                        # Save to file
+                        try:
+                            _tf = json.load(open("config/aggressive_trades.json"))
+                            for _t in _tf.get("trades", []):
+                                if _t.get("symbol") == sym:
+                                    _t["_entered"] = True
+                            json.dump(_tf, open("config/aggressive_trades.json", "w"), indent=2, default=str)
+                        except Exception:
+                            pass
                     trade["_entered_time"] = str(datetime.now())
                     try:
                         _tf = json.load(open("config/aggressive_trades.json"))
@@ -402,8 +427,11 @@ def run(paper=True):
                                 qty = contracts[0].get("qty", 1)
                                 stype = s.get("type", "NAKED_LONG")
                                 if entry_mid > 0 and csym:
-                                    ah_stop = client.get_account_numbers().json()[1]["hashValue"]
-                                    bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
+                                    ah_stop = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")
+                                    # Wait for Schwab to process entry before placing stop
+                        import time as _tw
+                        _tw.sleep(3)
+                        bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
                     except Exception as e:
                         logger.warning(f"Bracket stop error: {e}")
                     if result.get("status") == "REJECTED":
@@ -472,7 +500,7 @@ def run(paper=True):
                     if _et:
                         try:
                             _etd = datetime.fromisoformat(_et) if isinstance(_et,str) else _et
-                            if (_dt.datetime.now()-_etd).total_seconds() < 120:
+                            if (datetime.now()-_etd).total_seconds() < 120:
                                 continue
                         except: pass
                     # Convert per-share to total value
@@ -585,7 +613,7 @@ def run(paper=True):
                         "strategy_type": spread_type,
                         "entry_cost": total_entry,
                         "legs": legs,
-                        "entry_date": "",
+                        "entry_date": _entry_dates.get(sym, ""),
                         "max_hold_days": 21,
                     }
                     # Check cooldown before exit
@@ -627,7 +655,7 @@ def run(paper=True):
                             "strategy_type": "NAKED_LONG",
                             "entry_cost": entry_cost,
                             "legs": [{"symbol": lp["symbol"], "leg": "LONG", "qty": abs(lp["qty"])}],
-                            "entry_date": "",
+                            "entry_date": _entry_dates.get(sym, ""),
                             "max_hold_days": 21,
                         }
                         should_exit, reason = exits.check_exit(pos_for_exit, current_total)
@@ -670,7 +698,7 @@ def run(paper=True):
                             "entry_cost": entry_cost,
                             "premium": entry_cost,
                             "legs": [{"symbol": lp["symbol"], "leg": "SHORT", "qty": abs(lp["qty"])}],
-                            "entry_date": "",
+                            "entry_date": _entry_dates.get(sym, ""),
                             "max_hold_days": 21,
                         }
                         should_exit, reason = exits.check_exit(pos_for_exit, current_total)
@@ -721,7 +749,7 @@ def run(paper=True):
                                             pass
                                         # Check if any order for this symbol was filled today
                                         try:
-                                            ah = client.get_account_numbers().json()[1]["hashValue"]
+                                            ah = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")
                                             orders = client.get_orders_for_account(ah).json()
                                             for o in orders:
                                                 if o.get("status") == "FILLED":
@@ -771,7 +799,7 @@ def run(paper=True):
         # ── PEAK EQUITY TRACKING ──
         if not paper and cycle % 20 == 0:  # Every ~10 min
             try:
-                _bal = client.get_account(client.get_account_numbers().json()[1]["hashValue"])
+                _bal = client.get_account(next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437"))
                 _eq = _bal.json().get("securitiesAccount", {}).get("currentBalances", {}).get("liquidationValue", 0)
                 if _eq > 0:
                     _bs_path = "config/breaker_state.json"

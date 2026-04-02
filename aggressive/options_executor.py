@@ -178,7 +178,14 @@ class OptionsExecutor:
                     pass
                 logger.info(f"LIVE NAKED: {trade['symbol']} x{qty} @ ${limit}")
                 return {"status": "SUBMITTED", "cost": cost}
-            return {"status": "REJECTED", "code": resp.status_code}
+            # Try to get rejection reason from Schwab
+                try:
+                    _rej_body = resp.json() if resp.status_code != 429 else {}
+                    _rej_reason = _rej_body.get("message", "") + " " + str(_rej_body.get("errors", ""))
+                    logger.warning(f"ORDER REJECTED: {trade.get('symbol','?')} status={resp.status_code} reason={_rej_reason[:100]}")
+                    return {"status": "REJECTED", "code": resp.status_code, "reason": _rej_reason}
+                except Exception:
+                    return {"status": "REJECTED", "code": resp.status_code, "reason": f"HTTP {resp.status_code}"}
         except Exception as e:
             return {"status": "ERROR", "reason": str(e)}
 
@@ -463,8 +470,18 @@ class OptionsExecutor:
             csym = leg.get("symbol", "")
             qty = leg.get("qty", 1)
             try:
-                from schwab.orders.options import option_sell_to_close_market
-                order = option_sell_to_close_market(csym, qty)
+                from schwab.orders.options import option_sell_to_close_limit, option_sell_to_close_market
+                # Use limit order at bid price (avoid market order slippage)
+                try:
+                    _q = self.client.get_quote(csym)
+                    _bid = _q.json().get(csym, {}).get("quote", {}).get("bidPrice", 0) if _q.status_code == 200 else 0
+                    if _bid > 0.05:
+                        order = option_sell_to_close_limit(csym, qty, str(round(_bid * 0.98, 2)))
+                        logger.info(f"LIMIT SELL: {csym} x{qty} @ ${_bid * 0.98:.2f} (bid=${_bid:.2f})")
+                    else:
+                        order = option_sell_to_close_market(csym, qty)
+                except Exception:
+                    order = option_sell_to_close_market(csym, qty)
                 resp = self.client.place_order(ah, order)
                 if resp.status_code in (httpx.codes.CREATED, httpx.codes.OK):
                     logger.info(f"LIVE CLOSE: {pos.get('underlying','?')} {csym} x{qty}")
