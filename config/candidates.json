@@ -2,596 +2,124 @@
   "scan_date": "",
   "candidates": [
     {
-      "symbol": "CMG",
-      "direction": "BEARISH",
+      "symbol": "MRK",
+      "direction": "PUT",
       "conviction": "HIGH",
-      "composite": 100,
+      "composite": 89.4,
       "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BEARISH",
+        "type": "DEBIT_SPREAD",
+        "score": 90,
+        "direction": "PUT",
         "contracts": [
           {
-            "symbol": "CMG   260417P00032500",
-            "desc": "CMG 04/17/2026 32.50 P",
-            "strike": 32.5,
-            "dte": 17,
-            "delta": 0.549,
-            "iv": 41.6,
-            "bid": 1.32,
-            "ask": 1.47,
-            "mid": 1.4,
-            "spread_pct": 0.1075,
-            "qty": 2,
-            "total_cost": 279.0,
-            "oi": 7015,
-            "volume": 30,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 1.4,
-        "max_loss": 1.4,
-        "max_profit": "unlimited",
-        "breakeven": 31.1,
-        "qty": 2,
-        "total_cost": 279.0,
-        "description": "Long 32.5 BEARISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "CMG",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BEARISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 86,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 8.231600976630622,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 95,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 139.95,
-        "ev_ratio": 0.5016,
-        "prob_profit": 0.729,
-        "prob_max": 0.182,
-        "risk_reward": 2.23,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.23,
-        "avg_loss": 0.84
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 7,
-        "cp_ratio": 0.6,
-        "total_premium": 1769950.0,
-        "opening_pct": 50.3
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "VZ",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 90,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 40,
-        "direction": "BULLISH",
-        "contracts": [
+            "symbol": "MRK   260515P00120000",
+            "desc": "MRK 05/15/2026 120.00 P",
+            "strike": 120.0,
+            "delta": 0.45,
+            "bid": 4.55,
+            "ask": 4.85,
+            "mid": 4.7,
+            "iv": 30.992,
+            "oi": 746,
+            "dte": 44,
+            "leg": "LONG",
+            "qty": 1
+          },
           {
-            "symbol": "VZ    260424P00050000",
-            "desc": "VZ 04/24/2026 50.00 P",
-            "strike": 50.0,
-            "dte": 24,
-            "delta": 0.539,
-            "iv": 24.5,
-            "bid": 1.39,
-            "ask": 1.45,
-            "mid": 1.42,
-            "spread_pct": 0.0423,
-            "qty": 2,
-            "total_cost": 284.0,
-            "oi": 831,
-            "volume": 84,
-            "leg": "LONG"
+            "symbol": "MRK   260515P00110000",
+            "desc": "MRK 05/15/2026 110.00 P",
+            "strike": 110.0,
+            "delta": 0.202,
+            "bid": 1.71,
+            "ask": 1.83,
+            "mid": 1.77,
+            "iv": 35.303,
+            "oi": 1404,
+            "dte": 44,
+            "leg": "SHORT",
+            "qty": 1
           }
         ],
-        "net_debit": 1.42,
-        "max_loss": 1.42,
-        "max_profit": "unlimited",
-        "breakeven": 48.58,
-        "qty": 2,
-        "total_cost": 284.0,
-        "description": "Long 50.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "VZ",
-        "price": 0,
-        "composite": 90,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 78,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 88.10534236267873,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 31.9,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 139.42,
-        "ev_ratio": 0.4909,
-        "prob_profit": 0.719,
-        "prob_max": 0.18,
-        "risk_reward": 2.27,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.27,
-        "avg_loss": 0.85
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 6,
-        "cp_ratio": 1.52,
-        "total_premium": 248692.0,
-        "opening_pct": 30.7
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "MARA",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "MARA  260417P00008500",
-            "desc": "MARA 04/17/2026 8.50 P",
-            "strike": 8.5,
-            "dte": 17,
-            "delta": 0.536,
-            "iv": 95.7,
-            "bid": 0.83,
-            "ask": 0.86,
-            "mid": 0.84,
-            "spread_pct": 0.0355,
-            "qty": 3,
-            "total_cost": 253.5,
-            "oi": 1090,
-            "volume": 119,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 0.84,
-        "max_loss": 0.84,
-        "max_profit": "unlimited",
-        "breakeven": 7.66,
-        "qty": 3,
-        "total_cost": 253.5,
-        "description": "Long 8.5 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "MARA",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 94,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 9.350804050029781,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 95,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 130.89,
-        "ev_ratio": 0.5163,
-        "prob_profit": 0.716,
-        "prob_max": 0.179,
-        "risk_reward": 2.03,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.03,
-        "avg_loss": 0.5
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 8,
-        "cp_ratio": 3.97,
-        "total_premium": 1642869.0,
-        "opening_pct": 42.0
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "AAL",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 98,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "AAL   260424P00011000",
-            "desc": "AAL 04/24/2026 11.00 P",
-            "strike": 11.0,
-            "dte": 24,
-            "delta": 0.52,
-            "iv": 67.0,
-            "bid": 0.83,
-            "ask": 0.9,
-            "mid": 0.86,
-            "spread_pct": 0.0809,
-            "qty": 3,
-            "total_cost": 259.5,
-            "oi": 1011,
-            "volume": 154,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 0.86,
-        "max_loss": 0.86,
-        "max_profit": "unlimited",
-        "breakeven": 10.14,
-        "qty": 3,
-        "total_cost": 259.5,
-        "description": "Long 11.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "AAL",
-        "price": 0,
-        "composite": 98,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 78,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 28.000000000000004,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 92.0,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 129.84,
-        "ev_ratio": 0.5003,
-        "prob_profit": 0.7,
-        "prob_max": 0.175,
-        "risk_reward": 2.08,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.08,
-        "avg_loss": 0.52
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 6,
-        "cp_ratio": 1.92,
-        "total_premium": 1381500.0,
-        "opening_pct": 50.2
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "SOFI",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "SOFI  260417P00016000",
-            "desc": "SOFI 04/17/2026 16.00 P",
-            "strike": 16.0,
-            "dte": 17,
-            "delta": 0.491,
-            "iv": 64.1,
-            "bid": 0.89,
-            "ask": 0.91,
-            "mid": 0.9,
-            "spread_pct": 0.0222,
-            "qty": 3,
-            "total_cost": 270.0,
-            "oi": 59519,
-            "volume": 2929,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 0.9,
-        "max_loss": 0.9,
-        "max_profit": "unlimited",
-        "breakeven": 15.1,
-        "qty": 3,
-        "total_cost": 270.0,
-        "description": "Long 16.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "SOFI",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 86,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 30.665147119767926,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 89.3,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 127.17,
-        "ev_ratio": 0.471,
-        "prob_profit": 0.671,
-        "prob_max": 0.168,
-        "risk_reward": 2.16,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.16,
-        "avg_loss": 0.54
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 7,
-        "cp_ratio": 2.73,
-        "total_premium": 1983998.0,
-        "opening_pct": 35.1
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "SNAP",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "SNAP  260515P00005000",
-            "desc": "SNAP 05/15/2026 5.00 P",
-            "strike": 5.0,
-            "dte": 45,
-            "delta": 0.542,
-            "iv": 90.5,
-            "bid": 0.78,
-            "ask": 0.83,
-            "mid": 0.8,
-            "spread_pct": 0.0621,
-            "qty": 3,
-            "total_cost": 241.5,
-            "oi": 546,
-            "volume": 129,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 0.8,
-        "max_loss": 0.8,
-        "max_profit": "unlimited",
-        "breakeven": 4.2,
-        "qty": 3,
-        "total_cost": 241.5,
-        "description": "Long 5.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
-      },
-      "analysis": {
-        "symbol": "SNAP",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
-        "sub_scores": {
-          "flow": 86,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 11.969696969696964,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 95,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 126.15,
-        "ev_ratio": 0.5223,
-        "prob_profit": 0.722,
-        "prob_max": 0.18,
-        "risk_reward": 1.93,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 1.93,
-        "avg_loss": 0.48
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 25.25
-      },
-      "flow_summary": {
-        "strength": 7,
-        "cp_ratio": 2.61,
-        "total_premium": 925398.0,
-        "opening_pct": 45.8
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "BAC",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 93,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 15,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "BAC   260515P00050000",
-            "desc": "BAC 05/15/2026 50.00 P",
-            "strike": 50.0,
-            "dte": 45,
-            "delta": 0.563,
-            "iv": 33.1,
-            "bid": 2.71,
-            "ask": 2.77,
-            "mid": 2.74,
-            "spread_pct": 0.0219,
-            "qty": 1,
-            "total_cost": 274.0,
-            "oi": 17555,
-            "volume": 645,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 2.74,
-        "max_loss": 2.74,
-        "max_profit": "unlimited",
-        "breakeven": 47.26,
+        "net_debit": 3.14,
+        "max_loss": 3.14,
+        "max_profit": 6.86,
+        "breakeven": 116.86,
         "qty": 1,
-        "total_cost": 274.0,
-        "description": "Long 50.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
+        "total_cost": 314.0,
+        "spread_width": 10.0,
+        "description": "Bear Put 110.0/120.0"
       },
       "analysis": {
-        "symbol": "BAC",
-        "price": 0,
-        "composite": 93,
+        "symbol": "MRK",
+        "price": 118.1,
+        "composite": 89.4,
         "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
+        "direction": "PUT",
+        "size_pct": 0.05,
         "sub_scores": {
-          "flow": 78,
-          "tech_bonus": 2,
-          "tech_penalty": 0
+          "trend": 90,
+          "pullback": 75,
+          "volume": 40,
+          "flow": 95,
+          "rel_strength": 60,
+          "rr": 90
         },
         "levels": {
-          "rsi": 64.22299366959363,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
+          "support": 116.6,
+          "resistance": 125.14,
+          "high_52w": 125.14,
+          "atr": 2.75,
+          "rr_ratio": 4.68,
+          "pullback_pct": 0.0291,
+          "rsi": 53.2
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 24.54
       },
-      "iv_rank": 55.8,
-      "gex": null,
+      "iv_rank": 18.4,
+      "gex": {
+        "net_gex": 46.17,
+        "regime": "POSITIVE",
+        "max_gex_strike": 125.0,
+        "max_gex_value": 9.06,
+        "flip_strike": 119.0,
+        "call_wall": 125.0,
+        "put_wall": 118.0,
+        "suggested_target": 125.0,
+        "key_levels": [
+          {
+            "strike": 125.0,
+            "gex": 9.06
+          },
+          {
+            "strike": 122.0,
+            "gex": 8.32
+          },
+          {
+            "strike": 130.0,
+            "gex": 8.19
+          },
+          {
+            "strike": 115.0,
+            "gex": 7.2
+          },
+          {
+            "strike": 120.0,
+            "gex": 5.24
+          }
+        ]
+      },
       "ev": {
-        "ev_dollar": 120.61,
-        "ev_ratio": 0.4402,
-        "prob_profit": 0.743,
-        "prob_max": 0.186,
-        "risk_reward": 1.33,
+        "ev_dollar": 166.36,
+        "ev_ratio": 0.5298,
+        "prob_profit": 0.63,
+        "prob_max": 0.22,
+        "risk_reward": 1.64,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.19,
-        "avg_loss": 1.64
+        "avg_win": 4.12,
+        "avg_loss": 2.51
       },
       "vol_regime": {
         "level": "HIGH",
@@ -599,86 +127,136 @@
         "signal": "FEAR_RECEDING",
         "strategy_bias": "DEBIT_SPREAD",
         "size_modifier": 0.9,
-        "current_vix": 25.25
+        "current_vix": 24.54
       },
       "flow_summary": {
         "strength": 6,
-        "cp_ratio": 1.74,
-        "total_premium": 673053.0,
-        "opening_pct": 44.5
+        "cp_ratio": 0.36,
+        "total_premium": 79547.0,
+        "opening_pct": 56.8
       },
-      "entry_price": 0,
+      "entry_price": 118.1,
       "max_hold_days": 30
     },
     {
-      "symbol": "SMCI",
-      "direction": "BULLISH",
+      "symbol": "NEE",
+      "direction": "PUT",
       "conviction": "HIGH",
-      "composite": 100,
+      "composite": 86.1,
       "strategy": {
-        "type": "NAKED_LONG",
-        "score": 5,
-        "direction": "BULLISH",
+        "type": "DEBIT_SPREAD",
+        "score": 90,
+        "direction": "PUT",
         "contracts": [
           {
-            "symbol": "SMCI  260501P00024000",
-            "desc": "SMCI 05/01/2026 24.00 P",
-            "strike": 24.0,
-            "dte": 31,
-            "delta": 0.55,
-            "iv": 78.3,
-            "bid": 2.58,
-            "ask": 2.96,
-            "mid": 2.77,
-            "spread_pct": 0.1372,
-            "qty": 1,
-            "total_cost": 277.0,
-            "oi": 271,
-            "volume": 6,
-            "leg": "LONG"
+            "symbol": "NEE   260515P00092500",
+            "desc": "NEE 05/15/2026 92.50 P",
+            "strike": 92.5,
+            "delta": 0.461,
+            "bid": 3.1,
+            "ask": 3.3,
+            "mid": 3.2,
+            "iv": 26.665,
+            "oi": 204,
+            "dte": 44,
+            "leg": "LONG",
+            "qty": 1
+          },
+          {
+            "symbol": "NEE   260515P00085000",
+            "desc": "NEE 05/15/2026 85.00 P",
+            "strike": 85.0,
+            "delta": 0.191,
+            "bid": 1.07,
+            "ask": 1.18,
+            "mid": 1.12,
+            "iv": 31.46,
+            "oi": 118,
+            "dte": 44,
+            "leg": "SHORT",
+            "qty": 1
           }
         ],
-        "net_debit": 2.77,
-        "max_loss": 2.77,
-        "max_profit": "unlimited",
-        "breakeven": 21.23,
+        "net_debit": 2.23,
+        "max_loss": 2.23,
+        "max_profit": 5.27,
+        "breakeven": 90.27,
         "qty": 1,
-        "total_cost": 277.0,
-        "description": "Long 24.0 BULLISH",
-        "vol_penalty": "elevated_vix_naked"
+        "total_cost": 223.0,
+        "spread_width": 7.5,
+        "description": "Bear Put 85.0/92.5"
       },
       "analysis": {
-        "symbol": "SMCI",
-        "price": 0,
-        "composite": 100,
+        "symbol": "NEE",
+        "price": 92.05,
+        "composite": 86.1,
         "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.0425,
+        "direction": "PUT",
+        "size_pct": 0.05,
         "sub_scores": {
-          "flow": 94,
-          "tech_bonus": 2,
-          "tech_penalty": 0
+          "trend": 90,
+          "pullback": 75,
+          "volume": 40,
+          "flow": 95,
+          "rel_strength": 60,
+          "rr": 75
         },
         "levels": {
-          "rsi": 7.696254489481786,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
+          "support": 90.45,
+          "resistance": 95.91,
+          "high_52w": 95.91,
+          "atr": 1.98,
+          "rr_ratio": 2.41,
+          "pullback_pct": 0.0253,
+          "rsi": 53.6
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 24.54
       },
-      "iv_rank": 95,
-      "gex": null,
+      "iv_rank": 17.7,
+      "gex": {
+        "net_gex": 9.72,
+        "regime": "POSITIVE",
+        "max_gex_strike": 93.0,
+        "max_gex_value": 5.24,
+        "flip_strike": 93.0,
+        "call_wall": 93.0,
+        "put_wall": 87.5,
+        "suggested_target": 93.0,
+        "key_levels": [
+          {
+            "strike": 93.0,
+            "gex": 5.24
+          },
+          {
+            "strike": 95.0,
+            "gex": 2.09
+          },
+          {
+            "strike": 87.5,
+            "gex": -1.83
+          },
+          {
+            "strike": 100.0,
+            "gex": 1.56
+          },
+          {
+            "strike": 94.0,
+            "gex": 1.16
+          }
+        ]
+      },
       "ev": {
-        "ev_dollar": 116.89,
-        "ev_ratio": 0.422,
-        "prob_profit": 0.73,
-        "prob_max": 0.182,
-        "risk_reward": 1.33,
+        "ev_dollar": 138.64,
+        "ev_ratio": 0.6217,
+        "prob_profit": 0.641,
+        "prob_max": 0.224,
+        "risk_reward": 1.77,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.22,
-        "avg_loss": 1.66
+        "avg_win": 3.16,
+        "avg_loss": 1.78
       },
       "vol_regime": {
         "level": "HIGH",
@@ -686,15 +264,15 @@
         "signal": "FEAR_RECEDING",
         "strategy_bias": "DEBIT_SPREAD",
         "size_modifier": 0.9,
-        "current_vix": 25.25
+        "current_vix": 24.54
       },
       "flow_summary": {
-        "strength": 8,
-        "cp_ratio": 2.94,
-        "total_premium": 949116.0,
-        "opening_pct": 30.4
+        "strength": 7,
+        "cp_ratio": 0.39,
+        "total_premium": 324651.0,
+        "opening_pct": 75.7
       },
-      "entry_price": 0,
+      "entry_price": 92.05,
       "max_hold_days": 30
     }
   ]

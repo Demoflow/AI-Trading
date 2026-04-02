@@ -119,8 +119,9 @@ class ExitManager:
                     logger.info(f"  T1 HIT: {_sym} +{pnl_pct:.0%} - consider scaling out")
                     ExitManager._t1_alerts_fired.add(_sym)
                 pos["_t1_alerted"] = True
+            return True, f"T1_profit_{pnl_pct:+.0%}"  # Auto-exit at T1
 
-        return True, f"T1_profit_{pnl_pct:+.0%}"  # Auto-exit at T1
+        return False, "hold"
 
     def _exit_debit_spread(self, pos, current_val, tm, days):
         """
@@ -275,3 +276,55 @@ class ExitManager:
         if days >= 25:
             return True, f"generic_max_hold"
         return False, "hold"
+    @staticmethod
+    def self_test():
+        """Run on startup to verify exit logic is correct."""
+        from datetime import date
+        from loguru import logger
+        em = ExitManager()
+        errors = []
+
+        # Test 1: Position at +5% should NOT exit (T1 is +50%)
+        pos1 = {"strategy_type": "NAKED_LONG", "entry_cost": 100, "entry_date": date.today().isoformat(), "max_hold_days": 21}
+        should, reason = em.check_exit(pos1, 105)  # +5%
+        if should:
+            errors.append(f"FAIL: +5% position returned exit=True reason={reason}")
+
+        # Test 2: Position at -10% should NOT exit (stop is -40%)
+        pos2 = {"strategy_type": "NAKED_LONG", "entry_cost": 100, "entry_date": date.today().isoformat(), "max_hold_days": 21}
+        should, reason = em.check_exit(pos2, 90)  # -10%
+        if should:
+            errors.append(f"FAIL: -10% position returned exit=True reason={reason}")
+
+        # Test 3: Position at -50% SHOULD exit (stop is -40%)
+        pos3 = {"strategy_type": "NAKED_LONG", "entry_cost": 100, "entry_date": date.today().isoformat(), "max_hold_days": 21}
+        should, reason = em.check_exit(pos3, 50)  # -50%
+        if not should:
+            errors.append(f"FAIL: -50% position returned exit=False")
+
+        # Test 4: Position at +55% SHOULD exit (T1 is +50%)
+        pos4 = {"strategy_type": "NAKED_LONG", "entry_cost": 100, "entry_date": date.today().isoformat(), "max_hold_days": 21}
+        should, reason = em.check_exit(pos4, 155)  # +55%
+        if not should:
+            errors.append(f"FAIL: +55% position returned exit=False")
+
+        # Test 5: Position at 0% (flat) should NOT exit
+        pos5 = {"strategy_type": "NAKED_LONG", "entry_cost": 100, "entry_date": date.today().isoformat(), "max_hold_days": 21}
+        should, reason = em.check_exit(pos5, 100)  # flat
+        if should:
+            errors.append(f"FAIL: flat position returned exit=True reason={reason}")
+
+        # Test 6: Debit spread at +10% should NOT exit
+        pos6 = {"strategy_type": "DEBIT_SPREAD", "entry_cost": 200, "entry_date": date.today().isoformat(), "max_hold_days": 14, "max_profit": 500}
+        should, reason = em.check_exit(pos6, 220)  # +10%
+        if should:
+            errors.append(f"FAIL: spread +10% returned exit=True reason={reason}")
+
+        if errors:
+            for e in errors:
+                logger.error(f"EXIT MANAGER SELF-TEST: {e}")
+            logger.error(f"EXIT MANAGER SELF-TEST: {len(errors)} FAILURES — DO NOT TRADE")
+            return False
+        else:
+            logger.info("EXIT MANAGER SELF-TEST: ALL 6 TESTS PASSED")
+            return True

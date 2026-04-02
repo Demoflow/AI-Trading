@@ -209,6 +209,13 @@ def run(paper=True):
         logger.info("No trades available. System will wait for evening scan.")
         return
 
+    # Run exit manager self-test before trading
+    from aggressive.exit_manager import ExitManager as _EM
+    _test_em = _EM()
+    if not _test_em.self_test():
+        logger.error("EXIT MANAGER FAILED SELF-TEST — ABORTING")
+        return
+
     logger.info(f"Loaded {len(trades)} trades (evening VIX: {evening_vix:.1f})")
 
     # Pre-market filter
@@ -310,10 +317,12 @@ def run(paper=True):
                     if not paper:
                         _summ = executor.get_live_summary()
                         if _summ:
-                            _cash = _summ.get("cash", 0)
+                            # Use settled cash only (cash account rules)
+                            _settled = _summ.get("settled_cash", _summ.get("cash", 0))
                             _cost = trade.get("strategy", {}).get("total_cost", 500)
-                            if _cost > _cash:
-                                logger.warning(f"SKIP {sym}: cost ${_cost:.0f} > cash ${_cash:.0f}")
+                            _buffer = 500  # Keep $500 safety buffer
+                            if _cost > (_settled - _buffer):
+                                logger.warning(f"SKIP {sym}: cost ${_cost:.0f} > settled cash ${_settled:.0f} (buffer ${_buffer})")
                                 trade["_rejected"] = True
                                 continue
                 except Exception:
@@ -397,6 +406,11 @@ def run(paper=True):
                                     bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
                     except Exception as e:
                         logger.warning(f"Bracket stop error: {e}")
+                    if result.get("status") == "REJECTED":
+                        _reason = str(result.get("reason", ""))
+                        if "Day Trade" in _reason or "Equity Restricted" in _reason:
+                            logger.error(f"PDT RESTRICTION DETECTED — halting all entries")
+                            break  # Stop trying to enter any more trades
                     if result.get("status") == "SUBMITTED":
                         logger.info(f"SUBMITTED {sym}: order placed, awaiting fill")
                         executed.add(sym)

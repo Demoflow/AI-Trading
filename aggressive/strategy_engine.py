@@ -19,7 +19,8 @@ from loguru import logger
 
 class StrategyEngine:
     # Calendar spreads disabled until valuation/exit bugs are fixed
-    BLOCKED_STRATEGIES = {"CALENDAR_SPREAD", "RISK_REVERSAL", "RATIO_BACKSPREAD"}  # BWB unblocked for catalyst plays
+    # Cash account: only NAKED_LONG allowed (no spreads at any level)
+    BLOCKED_STRATEGIES = {"CALENDAR_SPREAD", "RISK_REVERSAL", "RATIO_BACKSPREAD", "BROKEN_WING_BUTTERFLY", "DEBIT_SPREAD", "CREDIT_SPREAD", "NAKED_PUT_SELL", "NAKED_CALL_SELL", "SHORT_STRANGLE", "DUAL_STRATEGY"}
 
 
     def __init__(self, schwab_client):

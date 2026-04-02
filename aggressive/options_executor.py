@@ -169,6 +169,13 @@ class OptionsExecutor:
             ah = self._get_account_hash()
             resp = self.client.place_order(ah, order)
             if resp.status_code in (httpx.codes.CREATED, httpx.codes.OK):
+                # Log settlement status
+                try:
+                    _summ = self.get_live_summary()
+                    if _summ and _summ.get("unsettled", 0) > 0:
+                        logger.info(f"Settlement: cash=${_summ['cash']:,.2f} settled=${_summ['settled_cash']:,.2f} unsettled=${_summ['unsettled']:,.2f}")
+                except Exception:
+                    pass
                 logger.info(f"LIVE NAKED: {trade['symbol']} x{qty} @ ${limit}")
                 return {"status": "SUBMITTED", "cost": cost}
             return {"status": "REJECTED", "code": resp.status_code}
@@ -619,6 +626,8 @@ class OptionsExecutor:
             option_positions = [p for p in positions if p.get("instrument", {}).get("assetType") == "OPTION"]
             return {
                 "cash": bal.get("cashBalance", 0),
+                "settled_cash": bal.get("cashBalance", 0) - bal.get("unsettledCash", 0),
+                "unsettled": bal.get("unsettledCash", 0),
                 "equity": bal.get("liquidationValue", 0),
                 "open_positions": len(option_positions),
                 "total_pnl": sum(p.get("currentDayProfitLoss", 0) for p in option_positions),
@@ -643,3 +652,28 @@ class OptionsExecutor:
             "total_pnl": round(pnl, 2),
             "positions": op,
         }
+    def verify_order_fill(self, account_hash, wait_seconds=3):
+        """Check most recent order status after submission."""
+        import time
+        time.sleep(wait_seconds)
+        try:
+            r = self.client.get_orders_for_account(account_hash)
+            if r.status_code == 200:
+                orders = r.json()
+                if orders:
+                    latest = orders[0]
+                    status = latest.get("status", "UNKNOWN")
+                    desc = latest.get("statusDescription", "")
+                    sym = latest.get("orderLegCollection", [{}])[0].get("instrument", {}).get("symbol", "?")
+                    if status == "REJECTED":
+                        logger.warning(f"ORDER REJECTED by Schwab: {sym} - {desc}")
+                        return {"status": "REJECTED", "reason": desc}
+                    elif status == "FILLED":
+                        return {"status": "FILLED"}
+                    elif status in ("QUEUED", "WORKING", "ACCEPTED"):
+                        return {"status": "SUBMITTED"}
+                    else:
+                        return {"status": status, "reason": desc}
+        except Exception as e:
+            logger.warning(f"Order verify error: {e}")
+        return {"status": "UNKNOWN"}
