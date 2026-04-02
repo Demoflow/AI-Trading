@@ -112,7 +112,12 @@ class DeepAnalyzer:
 
         if stock_df is not None and len(stock_df) >= 20:
             return self._full(symbol, stock_df, spy_df, flow_data, econ_mod)
-        elif flow_data:
+        
+        # Fall back to flow-only analysis when:
+        # - No price data at all (stock_df is None)
+        # - Insufficient price data (< 20 rows)
+        # - _full() is skipped for any reason
+        if flow_data:
             try:
                 result = self._flow_only(symbol, flow_data, econ_mod)
                 if not result:
@@ -164,6 +169,7 @@ class DeepAnalyzer:
         tech_bonus = 0
         tech_penalty = 0
         rsi_val = 50  # default
+        stock_price = 0  # Set from live quote below
         try:
             import time
             time.sleep(0.05)
@@ -171,6 +177,7 @@ class DeepAnalyzer:
             if q.status_code == 200:
                 quote = q.json().get(symbol, {}).get("quote", {})
                 price = quote.get("lastPrice", 0)
+                stock_price = price
                 hi52 = quote.get("52WeekHigh", 0)
                 lo52 = quote.get("52WeekLow", 0)
                 change = quote.get("netPercentChangeInDouble", 0)

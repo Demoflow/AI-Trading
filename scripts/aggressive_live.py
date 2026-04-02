@@ -376,8 +376,7 @@ def run(paper=True):
                 if should_buy:
                     # Check real cash before ordering
                     try:
-                        r0 = client.get_account_numbers()
-                        ah0 = r0next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")  # Brokerage account
+                        ah0 = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == os.getenv("SCHWAB_ACCOUNT_NUMBER", "28135437"))  # Brokerage account
                         r1 = client.get_account(ah0)
                         real_cash = r1.json().get("securitiesAccount",{}).get("currentBalances",{}).get("availableFundsNonMarginableTrade",0)
                         trade_cost = trade.get("strategy",{}).get("total_cost",2000)
