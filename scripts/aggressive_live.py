@@ -209,6 +209,22 @@ def run(paper=True):
         logger.info("No trades available. System will wait for evening scan.")
         return
 
+    # PDT pre-check: detect if account is restricted
+    pdt_active = False
+    if not paper:
+        try:
+            _pdt_summ = executor.get_live_summary()
+            # Check if there's a day trade equity call or restriction
+            # Schwab doesn't expose day_trades_left directly
+            # We detect PDT by checking if equity < $25K on a margin account
+            if _pdt_summ:
+                _eq = _pdt_summ.get("equity", 0)
+                if _eq < 25000 and _eq > 0:
+                    logger.warning(f"PDT WARNING: Equity ${_eq:,.2f} < $25K — only multi-day holds allowed")
+                    logger.warning("PDT: System will trade but day trade protection is ACTIVE")
+        except Exception:
+            pass
+
     # Run exit manager self-test before trading
     from aggressive.exit_manager import ExitManager as _EM
     _test_em = _EM()
@@ -361,7 +377,7 @@ def run(paper=True):
                     # Check real cash before ordering
                     try:
                         r0 = client.get_account_numbers()
-                        ah0 = r0.json()[1]["hashValue"]  # Brokerage account
+                        ah0 = r0next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")  # Brokerage account
                         r1 = client.get_account(ah0)
                         real_cash = r1.json().get("securitiesAccount",{}).get("currentBalances",{}).get("availableFundsNonMarginableTrade",0)
                         trade_cost = trade.get("strategy",{}).get("total_cost",2000)
@@ -407,15 +423,6 @@ def run(paper=True):
                             json.dump(_tf, open("config/aggressive_trades.json", "w"), indent=2, default=str)
                         except Exception:
                             pass
-                    trade["_entered_time"] = str(datetime.now())
-                    try:
-                        _tf = json.load(open("config/aggressive_trades.json"))
-                        for _t in _tf.get("trades", []):
-                            if _t.get("symbol") == sym:
-                                _t["_entered"] = True
-                        json.dump(_tf, open("config/aggressive_trades.json", "w"), indent=2, default=str)
-                    except Exception:
-                        pass
                     # Place GTC stop at broker level
                     try:
                         if not paper:
@@ -429,9 +436,9 @@ def run(paper=True):
                                 if entry_mid > 0 and csym:
                                     ah_stop = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == "28135437")
                                     # Wait for Schwab to process entry before placing stop
-                        import time as _tw
-                        _tw.sleep(3)
-                        bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
+                                    import time as _tw
+                                    _tw.sleep(3)
+                                    bracket_mgr.place_stop(csym, qty, entry_mid, stype, ah_stop)
                     except Exception as e:
                         logger.warning(f"Bracket stop error: {e}")
                     if result.get("status") == "REJECTED":

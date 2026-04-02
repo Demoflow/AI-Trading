@@ -400,6 +400,7 @@ class OptionsExecutor:
             "entry_cost": round(cost, 2),
             "entry_date": date.today().isoformat(),
             "entry_net": round(s.get("net_debit", s.get("net_credit", 0)), 2),
+            "max_profit_dollar": s.get("max_profit", 0) if isinstance(s.get("max_profit"), (int, float)) else 0,
             "max_profit": s.get("max_profit", "unlimited"),
             "max_loss": s.get("max_loss", cost / 100),
             "spread_width": s.get("spread_width", 0),
