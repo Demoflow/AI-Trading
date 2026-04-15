@@ -70,6 +70,9 @@ class AggressiveScanner:
         self.gex = GEXAnalyzer()
         self.ev_calc = EVCalculator()
         self.vol = VolRegime()
+        self.skew = SkewAnalyzer()
+        self.sector_mom = SectorMomentum(schwab_client)
+        self.pos_corr = PositionCorrelation()
 
     def _get_existing_positions(self):
         syms = []
@@ -202,7 +205,7 @@ class AggressiveScanner:
                     if 0 < _price < 10:  # Min stock price $10
                         skipped["filter"] += 1
                         continue
-                    _contracts = analysis.get("contracts", strategy.get("contracts", []) if 'strategy' in dir() else [])
+                    _contracts = analysis.get("contracts", [])
                     for _c in _contracts:
                         _strike = _c.get("strike", 0)
                         if 0 < _strike < 8:  # Min strike $8
@@ -286,10 +289,6 @@ class AggressiveScanner:
                     pass
                 if earnings_buffer:
                     skipped["filter"] += 1
-                    continue
-
-
-                    skipped["low_score"] += 1
                     continue
 
                 iv_rank = 50
@@ -405,7 +404,7 @@ class AggressiveScanner:
             "regime": self.analyzer.market_regime,
             "trades": trades,
             "total_cost": total_cost,
-                    "kelly_size_pct": ev_result.get("kelly_size_pct", 5.0),
+                    "kelly_size_pct": trades[-1]["ev"].get("kelly_size_pct", 5.0) if trades else 5.0,
             "deployment_pct": round(total_cost / self.equity * 100, 1),
             "skipped": skipped,
             "universe_size": len(symbols),

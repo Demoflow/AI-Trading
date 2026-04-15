@@ -179,13 +179,13 @@ class OptionsExecutor:
                 logger.info(f"LIVE NAKED: {trade['symbol']} x{qty} @ ${limit}")
                 return {"status": "SUBMITTED", "cost": cost}
             # Try to get rejection reason from Schwab
-                try:
-                    _rej_body = resp.json() if resp.status_code != 429 else {}
-                    _rej_reason = _rej_body.get("message", "") + " " + str(_rej_body.get("errors", ""))
-                    logger.warning(f"ORDER REJECTED: {trade.get('symbol','?')} status={resp.status_code} reason={_rej_reason[:100]}")
-                    return {"status": "REJECTED", "code": resp.status_code, "reason": _rej_reason}
-                except Exception:
-                    return {"status": "REJECTED", "code": resp.status_code, "reason": f"HTTP {resp.status_code}"}
+            try:
+                _rej_body = resp.json() if resp.status_code != 429 else {}
+                _rej_reason = _rej_body.get("message", "") + " " + str(_rej_body.get("errors", ""))
+                logger.warning(f"ORDER REJECTED: {trade.get('symbol','?')} status={resp.status_code} reason={_rej_reason[:100]}")
+                return {"status": "REJECTED", "code": resp.status_code, "reason": _rej_reason}
+            except Exception:
+                return {"status": "REJECTED", "code": resp.status_code, "reason": f"HTTP {resp.status_code}"}
         except Exception as e:
             return {"status": "ERROR", "reason": str(e)}
 
