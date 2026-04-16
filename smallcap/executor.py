@@ -43,6 +43,11 @@ from smallcap.config import (
     SELL_SLIPPAGE_PCT,
     STOP_SELL_SLIPPAGE_PCT,
     QUOTE_STALENESS_SEC,
+    ORDER_TTF_TIMEOUT_SEC,
+    DYN_OFFSET_HIGH_LIQ,
+    DYN_OFFSET_MED_LIQ,
+    DYN_OFFSET_LOW_LIQ,
+    DYN_OFFSET_THIN_LIQ,
 )
 
 
@@ -132,33 +137,49 @@ class TradeExecutor:
 
         shares = decision["shares"]
 
-        # ── Place order ──
-        limit_price = str(round(signal.entry + LIMIT_ORDER_OFFSET, 2))
-        order_id = self._place_buy(sym, shares, limit_price)
+        # ── Dynamic limit offset based on L2 book liquidity ──
+        book = self._stream.get_book(sym)
+        ask  = quote.get("ask") or quote.get("last") or signal.entry
+        offset      = _dynamic_buy_offset(book, ask)
+        limit_price = round(signal.entry + offset, 2)
 
-        if order_id is None:
-            return _no_entry(f"order placement failed for {sym}")
+        # ── Place IOC order and wait for actual fill ──
+        order_id, filled_shares, fill_price = self._place_buy(sym, shares, limit_price)
+
+        if filled_shares == 0:
+            return _no_entry(
+                f"IOC order for {sym} — no fill at ${limit_price:.2f} "
+                f"(offset=${offset:.2f} from {_liq_label(book, ask)})"
+            )
+
+        # Accept partial fills — trade with what we got
+        if filled_shares < shares:
+            logger.info(
+                f"{sym}: partial IOC fill {filled_shares}/{shares} shares "
+                f"@ ${fill_price:.2f} (requested {shares})"
+            )
+            shares = filled_shares
 
         # ── Register position tracker ──
         tracker = _PositionTracker(
             symbol=sym,
             shares_total=shares,
-            entry_price=signal.entry,
+            entry_price=fill_price or signal.entry,
             stop_price=signal.stop,
             target1=signal.target1,
             target2=signal.target2,
-            order_id=order_id,
+            order_id=order_id or "unknown",
         )
         with self._lock:
             self._positions[sym] = tracker
 
-        # Notify risk manager so position tracking + P&L are accurate
-        self._risk.record_fill(sym, shares=shares, fill_price=signal.entry)
+        # Notify risk manager with actual fill data
+        self._risk.record_fill(sym, shares=shares, fill_price=fill_price or signal.entry)
 
         logger.info(
-            f"ENTRY: {sym} | {shares} shares | "
-            f"limit=${limit_price} | stop=${signal.stop:.2f} | "
-            f"t1=${signal.target1:.2f} t2=${signal.target2:.2f} | "
+            f"ENTRY: {sym} | {shares} shares @ ${fill_price:.2f} | "
+            f"limit=${limit_price:.2f} (offset=${offset:.2f}) | "
+            f"stop=${signal.stop:.2f} t1=${signal.target1:.2f} t2=${signal.target2:.2f} | "
             f"OFE={ofe_score} | {signal.pattern}"
         )
 
@@ -306,40 +327,69 @@ class TradeExecutor:
 
     # ── ORDER HELPERS ──────────────────────────────────────────────────────────
 
-    def _place_buy(self, sym: str, shares: int, limit_price: float) -> str | None:
-        """Place a limit buy. Returns order_id string or None on failure."""
-        try:
-            if USE_LIMIT_ORDERS:
-                order = (
-                    equity_buy_limit(sym, shares, str(limit_price))
-                    .set_duration(Duration.DAY)
-                    .set_session(Session.NORMAL)
-                    .build()
-                )
-            else:
-                from schwab.orders.equities import equity_buy_market
-                order = (
-                    equity_buy_market(sym, shares)
-                    .set_duration(Duration.DAY)
-                    .set_session(Session.NORMAL)
-                    .build()
-                )
+    def _place_buy(
+        self, sym: str, shares: int, limit_price: float
+    ) -> tuple[str | None, int, float]:
+        """
+        Place an IOC limit buy. Returns (order_id, filled_shares, avg_fill_price).
 
+        Using IOC (Immediate-Or-Cancel) means the order fills whatever is
+        available at the limit price and cancels the rest instantly — no partial
+        fill hang, no sitting in the queue while the price runs away.
+
+        Polls Schwab order status for up to ORDER_TTF_TIMEOUT_SEC to get the
+        actual filled quantity and price.  Returns (None, 0, 0.0) on failure.
+        """
+        try:
+            order = (
+                equity_buy_limit(sym, shares, limit_price)
+                .set_duration(Duration.IMMEDIATE_OR_CANCEL)
+                .set_session(Session.NORMAL)
+                .build()
+            )
             resp = self._client.place_order(self._acct, order)
-            if resp.status_code in (200, 201):
-                # Order ID is in the Location header
-                location = resp.headers.get("Location", "")
-                order_id = location.split("/")[-1] if "/" in location else "unknown"
-                return order_id
-            else:
+            if resp.status_code not in (200, 201):
                 logger.error(
                     f"Buy order failed: {sym} {shares}@{limit_price} "
                     f"HTTP {resp.status_code}: {resp.text[:200]}"
                 )
-                return None
+                return None, 0, 0.0
+
+            location = resp.headers.get("Location", "")
+            order_id = location.split("/")[-1] if "/" in location else "unknown"
+
+            # Poll for fill confirmation
+            filled, avg_price = self._poll_fill(order_id)
+            return order_id, filled, avg_price
+
         except Exception as e:
             logger.error(f"Buy order exception for {sym}: {e}")
-            return None
+            return None, 0, 0.0
+
+    def _poll_fill(self, order_id: str) -> tuple[int, float]:
+        """
+        Poll Schwab order status until the IOC order is resolved (FILLED/CANCELED)
+        or ORDER_TTF_TIMEOUT_SEC elapses.  Returns (filled_qty, avg_fill_price).
+        """
+        if order_id in (None, "unknown"):
+            return 0, 0.0
+
+        deadline = time.time() + ORDER_TTF_TIMEOUT_SEC
+        while time.time() < deadline:
+            time.sleep(0.5)
+            try:
+                resp = self._client.get_order(order_id, self._acct)
+                if resp.status_code == 200:
+                    data   = resp.json()
+                    status = data.get("status", "")
+                    filled = int(data.get("filledQuantity") or 0)
+                    avg_px = float(data.get("averagePrice") or data.get("price") or 0)
+                    if status in ("FILLED", "CANCELED", "EXPIRED", "REJECTED"):
+                        return filled, avg_px
+            except Exception:
+                pass
+        # Timeout — assume no fill (IOC should resolve well within 3s)
+        return 0, 0.0
 
     def _execute_sell(self, tracker: "_PositionTracker", shares: int, reason: str):
         """Place a limit sell and record the close in risk manager."""
@@ -442,6 +492,51 @@ class _PositionTracker:
 
 
 # ── HELPERS ────────────────────────────────────────────────────────────────────
+
+def _dynamic_buy_offset(book: dict | None, ask_price: float) -> float:
+    """
+    Return a limit order offset scaled by available L2 ask-side liquidity.
+
+    More shares sitting at/near the ask → smaller offset needed to get filled.
+    Thin book → wider offset so the IOC order reaches far enough to fill.
+
+    Counts shares within $0.15 of ask_price across all visible ask levels.
+    """
+    if not book or not ask_price:
+        return LIMIT_ORDER_OFFSET
+
+    asks      = book.get("asks", [])
+    liquidity = sum(
+        size for price, size in asks
+        if isinstance(price, (int, float)) and abs(price - ask_price) <= 0.15
+    )
+
+    if liquidity >= 10_000:
+        return DYN_OFFSET_HIGH_LIQ
+    if liquidity >= 3_000:
+        return DYN_OFFSET_MED_LIQ
+    if liquidity >= 1_000:
+        return DYN_OFFSET_LOW_LIQ
+    return DYN_OFFSET_THIN_LIQ
+
+
+def _liq_label(book: dict | None, ask_price: float) -> str:
+    """Human-readable liquidity tier label for logging."""
+    if not book or not ask_price:
+        return "no book"
+    asks      = book.get("asks", [])
+    liquidity = sum(
+        size for price, size in asks
+        if isinstance(price, (int, float)) and abs(price - ask_price) <= 0.15
+    )
+    if liquidity >= 10_000:
+        return f"high liq ({liquidity:,} shares)"
+    if liquidity >= 3_000:
+        return f"med liq ({liquidity:,} shares)"
+    if liquidity >= 1_000:
+        return f"low liq ({liquidity:,} shares)"
+    return f"thin ({liquidity:,} shares)"
+
 
 def _no_entry(reason: str) -> dict:
     logger.debug(f"Entry denied: {reason}")

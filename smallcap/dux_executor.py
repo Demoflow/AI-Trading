@@ -48,7 +48,15 @@ except ImportError:
     logger.warning("schwab.orders not importable — Dux executor will paper-simulate all orders")
 
 import time as _time
+import time as _time_std
 
+from smallcap.config import (
+    ORDER_TTF_TIMEOUT_SEC,
+    DYN_OFFSET_HIGH_LIQ,
+    DYN_OFFSET_MED_LIQ,
+    DYN_OFFSET_LOW_LIQ,
+    DYN_OFFSET_THIN_LIQ,
+)
 from smallcap.dux_config import (
     DUX_PARTIAL1_FRAC,
     DUX_TRAIL_PCT,
@@ -176,25 +184,41 @@ class DuxExecutor:
                 f"${signal.entry:.2f} (limit {DUX_MAX_ENTRY_DRIFT_PCT:.0%}) — skipping"
             )
 
+        # ── Dynamic limit price based on L2 liquidity ──────────────────────
+        book = self._stream.get_book(sym)
+
         if signal.direction == "SHORT":
             # SELL SHORT limit = minimum acceptable sale price.
-            # Setting at (bid - offset) guarantees an immediate fill: we accept
-            # the current bid minus a small buffer to absorb spread noise.
-            limit_price = round(bid - DUX_SHORT_ENTRY_OFFSET, 2)
+            # bid - offset: accept current bid minus small buffer.
+            # Thinner bid side → smaller offset (we want to sell, less offset = more aggressive).
+            bid_offset  = _dynamic_short_offset(book, bid)
+            limit_price = round(bid - bid_offset, 2)
             if limit_price <= 0:
                 return _no_entry(f"{sym} computed short limit price <= 0")
         else:
-            # LONG (Dip Panic): buy just above current ask
-            limit_price = round(ask + 0.02, 2)
+            # LONG (Dip Panic): buy above current ask with dynamic offset
+            ask_offset  = _dynamic_buy_offset(book, ask)
+            limit_price = round(ask + ask_offset, 2)
 
-        # ── Place order ──
-        order_id = self._place_order(sym, shares, limit_price, signal.direction)
+        # ── Place IOC order and poll for actual fill ──
+        order_id, filled_shares, fill_price_actual = self._place_order(
+            sym, shares, limit_price, signal.direction
+        )
 
-        if order_id is None and not self._paper:
-            return _no_entry(f"order placement failed for {sym}")
+        if filled_shares == 0 and not self._paper:
+            return _no_entry(f"IOC order for {sym} ({signal.direction}) — no fill at ${limit_price:.2f}")
+
+        # Accept partial fills
+        if filled_shares > 0 and filled_shares < shares:
+            logger.info(
+                f"[DuxExec] {sym}: partial IOC fill {filled_shares}/{shares} shares "
+                f"@ ${fill_price_actual:.2f}"
+            )
+            shares = filled_shares
+
+        fill_price = fill_price_actual if fill_price_actual > 0 else limit_price
 
         # ── Register position tracker ──
-        fill_price = limit_price   # assume immediate fill at limit
         tracker = _DuxTracker(
             symbol=sym,
             shares_total=shares,
@@ -459,14 +483,17 @@ class DuxExecutor:
 
     def _place_order(
         self,
-        symbol:     str,
-        shares:     int,
+        symbol:      str,
+        shares:      int,
         limit_price: float,
-        direction:  str,
-    ) -> str | None:
+        direction:   str,
+    ) -> tuple[str | None, int, float]:
         """
-        Place a limit order. Returns order_id string, "PAPER" for simulated,
-        or None on failure.
+        Place an IOC limit order. Returns (order_id, filled_shares, avg_fill_price).
+
+        IOC (Immediate-Or-Cancel) fills whatever is available at the limit price
+        and cancels the rest instantly — critical for short entries where the
+        window is seconds wide before the exhaustion move reverses.
 
         direction: "SHORT" → SELL_SHORT
                    "LONG"  → BUY (Dip Panic long entry)
@@ -476,11 +503,11 @@ class DuxExecutor:
                 f"[DuxExec][PAPER] {'SELL_SHORT' if direction == 'SHORT' else 'BUY'} "
                 f"{symbol} {shares} @ ${limit_price:.2f}"
             )
-            return "PAPER"
+            return "PAPER", shares, limit_price   # paper = assume full fill
 
         if not _SCHWAB_ORDERS_AVAILABLE:
             logger.error("[DuxExec] schwab.orders not available — cannot place real orders")
-            return None
+            return None, 0, 0.0
 
         try:
             instruction = (
@@ -491,7 +518,7 @@ class DuxExecutor:
                 .set_order_type(OrderType.LIMIT)
                 .set_price(round(limit_price, 2))
                 .set_session(Session.NORMAL)
-                .set_duration(Duration.DAY)
+                .set_duration(Duration.IMMEDIATE_OR_CANCEL)
                 .set_order_strategy_type(OrderStrategyType.SINGLE)
                 .add_equity_leg(instruction, symbol, shares)
                 .build()
@@ -499,17 +526,39 @@ class DuxExecutor:
             resp = self._client.place_order(self._acct, order)
             if resp.status_code in (200, 201):
                 location = resp.headers.get("Location", "")
-                return location.split("/")[-1] if "/" in location else "unknown"
+                order_id = location.split("/")[-1] if "/" in location else "unknown"
+                filled, avg_px = self._poll_fill(order_id)
+                return order_id, filled, avg_px
             else:
                 logger.error(
                     f"[DuxExec] Order failed: {symbol} {direction} "
                     f"{shares}@{limit_price} HTTP {resp.status_code}: "
                     f"{resp.text[:200]}"
                 )
-                return None
+                return None, 0, 0.0
         except Exception as e:
             logger.error(f"[DuxExec] Order exception for {symbol} ({direction}): {e}")
-            return None
+            return None, 0, 0.0
+
+    def _poll_fill(self, order_id: str) -> tuple[int, float]:
+        """Poll Schwab order status until IOC resolves. Returns (filled_qty, avg_price)."""
+        if order_id in (None, "unknown", "PAPER"):
+            return 0, 0.0
+        deadline = _time_std.time() + ORDER_TTF_TIMEOUT_SEC
+        while _time_std.time() < deadline:
+            _time_std.sleep(0.5)
+            try:
+                resp = self._client.get_order(order_id, self._acct)
+                if resp.status_code == 200:
+                    data   = resp.json()
+                    status = data.get("status", "")
+                    filled = int(data.get("filledQuantity") or 0)
+                    avg_px = float(data.get("averagePrice") or data.get("price") or 0)
+                    if status in ("FILLED", "CANCELED", "EXPIRED", "REJECTED"):
+                        return filled, avg_px
+            except Exception:
+                pass
+        return 0, 0.0
 
     def _execute_exit(self, tracker: "_DuxTracker", shares: int, reason: str):
         """
@@ -659,6 +708,42 @@ class _DuxTracker:
 
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
+
+def _dynamic_buy_offset(book: dict | None, ask_price: float) -> float:
+    """Dynamic limit offset for long entries based on ask-side L2 liquidity."""
+    if not book or not ask_price:
+        return DYN_OFFSET_LOW_LIQ
+    asks      = book.get("asks", [])
+    liquidity = sum(
+        size for price, size in asks
+        if isinstance(price, (int, float)) and abs(price - ask_price) <= 0.15
+    )
+    if liquidity >= 10_000: return DYN_OFFSET_HIGH_LIQ
+    if liquidity >= 3_000:  return DYN_OFFSET_MED_LIQ
+    if liquidity >= 1_000:  return DYN_OFFSET_LOW_LIQ
+    return DYN_OFFSET_THIN_LIQ
+
+
+def _dynamic_short_offset(book: dict | None, bid_price: float) -> float:
+    """
+    Dynamic limit offset for short entries based on bid-side L2 liquidity.
+    For shorts, offset is subtracted from bid: bid - offset.
+    Thinner bid → smaller offset (we're more aggressive, accepting a lower minimum price).
+    """
+    if not book or not bid_price:
+        return DUX_SHORT_ENTRY_OFFSET
+    bids      = book.get("bids", [])
+    liquidity = sum(
+        size for price, size in bids
+        if isinstance(price, (int, float)) and abs(price - bid_price) <= 0.15
+    )
+    # For shorts: thin book = we can be more aggressive (smaller offset)
+    # because there are fewer buyers to absorb our sell
+    if liquidity >= 10_000: return DUX_SHORT_ENTRY_OFFSET * 2   # fat book, need less aggression
+    if liquidity >= 3_000:  return DUX_SHORT_ENTRY_OFFSET
+    if liquidity >= 1_000:  return DUX_SHORT_ENTRY_OFFSET * 0.5
+    return 0.01  # very thin — nearly at market, offset minimal
+
 
 def _no_entry(reason: str) -> dict:
     logger.debug(f"[DuxExec] Entry denied: {reason}")

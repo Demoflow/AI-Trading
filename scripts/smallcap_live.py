@@ -49,6 +49,7 @@ from smallcap.dux_pattern_engine import DuxPatternEngine
 from smallcap.dux_risk_manager import DuxRiskManager
 from smallcap.dux_executor import DuxExecutor
 from smallcap.dux_config import DUX_START_CT, DUX_LATE_ENTRY_CUTOFF_CT
+from smallcap.market_character import analyze_market_character
 
 
 def _hour_ct() -> float:
@@ -92,6 +93,17 @@ def run():
         logger.info(f"Account: {account_id}")
     except Exception as e:
         logger.error(f"Could not fetch account numbers: {e}")
+
+    # ── MARKET CHARACTER ANALYSIS ─────────────────────────────────────────────
+    # Assess session regime (hot/normal/cold/avoid) using VIX + SPY pre-market.
+    # Returns an adjusted OFE threshold so we only lower the bar on genuinely
+    # favorable days and raise it when conditions are choppy.
+    market = analyze_market_character(client)
+    ofe_threshold = market.ofe_threshold
+    logger.info(
+        f"Session profile: {market.regime.upper()} | "
+        f"OFE threshold set to {ofe_threshold} | {market.note}"
+    )
 
     # ── UNIVERSE ───────────────────────────────────────────────────────────────
     universe = UniverseManager()
@@ -312,7 +324,7 @@ def run():
                                 continue
                             score_dict = ofe.get_score(sym)
                             ofe_score  = score_dict["composite"] if score_dict else 0
-                            if ofe_score >= 65:
+                            if ofe_score >= ofe_threshold:
                                 executor.enter(sig, ofe_score)
                                 break
 

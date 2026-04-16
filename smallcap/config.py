@@ -175,3 +175,16 @@ STOP_SELL_SLIPPAGE_PCT = 0.001   # 0.1% below bid for urgent sells — near-guar
 USE_LIMIT_ORDERS     = True      # Always use limit orders — never market on small caps
 LIMIT_ORDER_OFFSET   = 0.05      # Place limit $0.05 above ask for buys (avoid missing fills)
 QUOTE_STALENESS_SEC  = 10        # Reject entry if last streaming quote is older than this
+
+# ── IOC ORDER FILL POLLING ──────────────────────────────────────────────────────
+# After placing an IOC entry order, poll fill status for up to this many seconds.
+# IOC orders resolve in <1s normally; 3s is a conservative safety ceiling.
+ORDER_TTF_TIMEOUT_SEC = 3
+
+# ── DYNAMIC LIMIT OFFSET TIERS ─────────────────────────────────────────────────
+# Offset is scaled by available L2 liquidity within $0.15 of the touch price.
+# More shares available → smaller offset needed to get filled.
+DYN_OFFSET_HIGH_LIQ   = 0.01    # >= 10,000 shares available
+DYN_OFFSET_MED_LIQ    = 0.03    # >= 3,000 shares
+DYN_OFFSET_LOW_LIQ    = 0.05    # >= 1,000 shares (same as old LIMIT_ORDER_OFFSET)
+DYN_OFFSET_THIN_LIQ   = 0.10    # < 1,000 shares — thin book, need wider offset

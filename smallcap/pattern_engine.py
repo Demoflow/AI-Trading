@@ -168,7 +168,7 @@ class PatternEngine:
 
         found: list[PatternSignal] = []
 
-        # Run all three detectors
+        # Run all four detectors
         bull_flag = _detect_bull_flag(sym, candles)
         if bull_flag:
             found.append(bull_flag)
@@ -180,6 +180,10 @@ class PatternEngine:
         orb = _detect_orb(sym, candles)
         if orb:
             found.append(orb)
+
+        vwap_reclaim = _detect_vwap_reclaim(sym, candles)
+        if vwap_reclaim:
+            found.append(vwap_reclaim)
 
         if not found:
             return
@@ -431,6 +435,112 @@ def _detect_orb(sym: str, candles: list[dict]) -> PatternSignal | None:
         target1=t1, target2=t2,
         strength=strength, ts=_utcnow(),
         candles=or_candles + [current],
+    )
+
+
+def _calc_vwap(candles: list[dict]) -> float:
+    """
+    Calculate VWAP from a list of OHLCV candles.
+    VWAP = Σ(typical_price × volume) / Σ(volume)
+    typical_price = (high + low + close) / 3
+    """
+    cum_pv = 0.0
+    cum_v  = 0.0
+    for c in candles:
+        h = c.get("high", 0) or 0
+        l = c.get("low",  0) or 0
+        cl= c.get("close",0) or 0
+        v = c.get("volume",0) or 0
+        if h > 0 and l > 0 and cl > 0 and v > 0:
+            cum_pv += ((h + l + cl) / 3) * v
+            cum_v  += v
+    return cum_pv / cum_v if cum_v > 0 else 0.0
+
+
+def _detect_vwap_reclaim(sym: str, candles: list[dict]) -> PatternSignal | None:
+    """
+    VWAP Reclaim: stock dips below VWAP then reclaims and holds above it.
+
+    This is one of Ross Cameron's most reliable intraday setups — the stock
+    found buyers at VWAP, absorbs selling, and resumes the uptrend.
+
+    Structure (reading right to left):
+      [current]   close > VWAP, open > VWAP  ← holding above VWAP
+      [prev]      close > VWAP, low  < VWAP  ← the actual reclaim candle
+      [earlier]   at least one close < VWAP  ← confirmed dip below VWAP
+
+    Entry: current candle high + $0.01 (break of holding candle)
+    Stop:  VWAP - $0.02 buffer
+    Targets: 2:1 and 3:1 R:R from the entry
+    """
+    if len(candles) < 8:
+        return None
+
+    vwap = _calc_vwap(candles)
+    if vwap <= 0:
+        return None
+
+    current = candles[-1]
+    prev    = candles[-2]
+
+    # Current candle must be holding above VWAP (both open and close)
+    if (current.get("close") or 0) <= vwap:
+        return None
+    if (current.get("open") or 0) <= vwap:
+        return None
+
+    # Previous candle must have crossed VWAP from below to above:
+    #   close above VWAP (reclaim) but low touched below VWAP (the dip)
+    prev_close = prev.get("close") or 0
+    prev_low   = prev.get("low")   or 0
+    if prev_close <= vwap:
+        return None
+    if prev_low >= vwap:
+        return None   # didn't actually touch/cross VWAP
+
+    # Must have at least one candle closing below VWAP in the last 8 bars
+    # (not counting current or prev — those are the reclaim/hold bars)
+    had_dip = any((c.get("close") or 0) < vwap for c in candles[-8:-2])
+    if not had_dip:
+        return None
+
+    entry = round((current.get("high") or 0) + 0.01, 2)
+    stop  = round(vwap - 0.02, 2)
+    risk  = entry - stop
+
+    # Sanity checks
+    if risk <= 0:
+        return None
+    if entry <= 0 or stop <= 0:
+        return None
+    if risk > entry * 0.10:   # reject if stop is >10% away (too wide for small cap)
+        return None
+
+    # Guarantee 2:1 R:R
+    t1 = round(entry + risk * 2.0, 2)
+    t2 = round(entry + risk * 3.0, 2)
+
+    # Strength: reclaim candle volume vs recent average, and proximity to VWAP
+    recent_candles = candles[-10:]
+    avg_vol = (
+        sum(c.get("volume", 0) or 0 for c in recent_candles) / len(recent_candles)
+        if recent_candles else 0
+    )
+    prev_vol = prev.get("volume", 0) or 0
+    vol_qual = min(1.0, prev_vol / avg_vol) if avg_vol > 0 else 0.5
+
+    # Proximity: the closer the current close is to VWAP, the cleaner the reclaim
+    dist_pct = (current.get("close", vwap) - vwap) / vwap if vwap > 0 else 0.05
+    proximity = max(0.0, 1.0 - dist_pct / 0.02)   # within 2% of VWAP = full score
+
+    strength = int(vol_qual * 50 + proximity * 50)
+
+    return PatternSignal(
+        symbol=sym, pattern="VWAP_RECLAIM",
+        entry=entry, stop=stop,
+        target1=t1, target2=t2,
+        strength=strength, ts=_utcnow(),
+        candles=candles[-5:],
     )
 
 

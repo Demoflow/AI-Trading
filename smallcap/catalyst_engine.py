@@ -36,6 +36,7 @@ Usage:
     engine.stop()                       # graceful shutdown
 """
 
+import os
 import re
 import time
 import json
@@ -47,6 +48,30 @@ from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from urllib.error import URLError
 from loguru import logger
+
+# ── LLM SENTIMENT (optional — degrades gracefully if anthropic not installed) ──
+# Used to refine catalyst scoring beyond keyword matching.
+# Only called for headlines that already pass MIN_CATALYST_SCORE so that API
+# usage is minimal (high-value events only, not every filing).
+_anthropic_client = None
+_LLM_AVAILABLE    = False
+
+def _init_llm():
+    global _anthropic_client, _LLM_AVAILABLE
+    try:
+        import anthropic as _ant
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            _anthropic_client = _ant.Anthropic(api_key=api_key)
+            _LLM_AVAILABLE = True
+            logger.info("CatalystEngine: Claude LLM sentiment enabled")
+        else:
+            logger.debug("CatalystEngine: ANTHROPIC_API_KEY not set — keyword scoring only")
+    except ImportError:
+        logger.debug("CatalystEngine: anthropic not installed — keyword scoring only")
+
+_LLM_LAST_CALL = 0.0       # monotonic timestamp of last LLM call (rate limit)
+_LLM_MIN_INTERVAL = 1.5    # minimum seconds between LLM calls
 
 try:
     import feedparser
@@ -144,12 +169,15 @@ class CatalystEngine:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._seen_ids: set[str] = set()  # deduplicate feed entries
+        # LLM result cache: headline_id → adjusted_score (avoids re-scoring same headline)
+        self._llm_cache: dict[str, int] = {}
 
         if not _FEEDPARSER_OK:
             logger.warning(
                 "feedparser not installed — catalyst engine running in limited mode. "
                 "Run: pip install feedparser"
             )
+        _init_llm()
 
     # ── PUBLIC API ─────────────────────────────────────────────────────────────
 
@@ -306,6 +334,7 @@ class CatalystEngine:
                         self._record_catalyst(
                             sym, score, ts, headline,
                             expand_universe=True,  # EDGAR tickers are authoritative
+                            headline_id=f"efts:{hit_id}",
                         )
                         new_count += 1
 
@@ -351,7 +380,8 @@ class CatalystEngine:
             for sym in tickers:
                 # EDGAR RSS: only record for universe members (no expansion —
                 # filing titles are too vague to trust for new tickers)
-                self._record_catalyst(sym, score, ts, title, expand_universe=False)
+                self._record_catalyst(sym, score, ts, title,
+                                      expand_universe=False, headline_id=entry_id)
                 new_count += 1
 
             if new_count:
@@ -428,7 +458,8 @@ class CatalystEngine:
 
                 expand = bool(dc_keyword)  # expand universe only when ticker is explicit
                 for sym in tickers:
-                    if self._record_catalyst(sym, score, ts, title, expand_universe=expand):
+                    if self._record_catalyst(sym, score, ts, title,
+                                             expand_universe=expand, headline_id=entry_id):
                         new_count += 1
 
                 if tickers:
@@ -561,6 +592,92 @@ class CatalystEngine:
         if new_count:
             logger.debug(f"Yahoo poll: {new_count} new catalyst event(s)")
 
+    # ── LLM SENTIMENT REFINEMENT ──────────────────────────────────────────────
+
+    def _llm_refine_score(
+        self,
+        headline_id: str,
+        symbol: str,
+        headline: str,
+        keyword_score: int,
+    ) -> int:
+        """
+        Use Claude to refine a keyword-matched catalyst score.
+
+        Only called when:
+          - LLM is available (ANTHROPIC_API_KEY set)
+          - keyword_score >= MIN_CATALYST_SCORE (don't waste API calls on weak signals)
+          - headline not already in LLM cache
+
+        Returns the refined score. Key improvements over keyword matching:
+          - Distinguishes "FDA approved drug X" (bullish) from "FDA investigating Y" (bearish)
+          - Detects disguised offerings ("at-the-market equity program") keyword matching misses
+          - Catches context: "did NOT meet primary endpoint" is a loss even if "phase" matches
+          - Suppresses (returns negative score) on dilutive/negative news
+
+        Rate-limited to _LLM_MIN_INTERVAL seconds between calls.
+        """
+        global _LLM_LAST_CALL
+
+        if not _LLM_AVAILABLE or not _anthropic_client:
+            return keyword_score
+
+        if headline_id in self._llm_cache:
+            return self._llm_cache[headline_id]
+
+        # Rate limit
+        elapsed = time.monotonic() - _LLM_LAST_CALL
+        if elapsed < _LLM_MIN_INTERVAL:
+            time.sleep(_LLM_MIN_INTERVAL - elapsed)
+
+        prompt = f"""You are scoring a news headline for a small cap momentum trading system.
+
+Symbol: {symbol}
+Headline: {headline}
+Initial keyword score: {keyword_score}
+
+Rules:
+1. BULLISH events (positive score 15-50): FDA approval/clearance, M&A/buyout announcement,
+   earnings beat with raised guidance, major contract win, positive clinical trial PRIMARY endpoint
+2. BEARISH events (negative score -15 to -50): stock offering/dilution/ATM, FDA rejection,
+   trial FAILURE, reverse split, fraud/investigation, bankruptcy
+3. NEUTRAL/AMBIGUOUS (score 5-10): filing with vague language, mixed results, routine update
+4. Context matters: "FDA approved" = bullish; "FDA investigating" = bearish
+   "Phase 3 positive" = bullish; "did not meet primary endpoint" = bearish despite matching "phase"
+
+Respond with JSON only: {{"score": N, "sentiment": "bullish|bearish|neutral", "reason": "5 words max"}}
+Score range: -50 to 50"""
+
+        try:
+            _LLM_LAST_CALL = time.monotonic()
+            msg = _anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=80,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
+            if "{" in text:
+                text = text[text.index("{"):text.rindex("}") + 1]
+            result   = json.loads(text)
+            llm_score = int(result.get("score", keyword_score))
+            sentiment = result.get("sentiment", "neutral")
+            reason    = result.get("reason", "")
+
+            # Clamp to reasonable range
+            llm_score = max(-50, min(50, llm_score))
+            self._llm_cache[headline_id] = llm_score
+
+            if abs(llm_score - keyword_score) >= 10:
+                logger.info(
+                    f"LLM catalyst [{symbol}]: score {keyword_score:+d}→{llm_score:+d} "
+                    f"({sentiment}) — {reason} | {headline[:60]}"
+                )
+            return llm_score
+
+        except Exception as e:
+            logger.debug(f"LLM catalyst scoring error for {symbol}: {e}")
+            return keyword_score
+
     # ── SHARED RECORDING LOGIC ────────────────────────────────────────────────
 
     def _record_catalyst(
@@ -570,6 +687,7 @@ class CatalystEngine:
         ts: datetime,
         headline: str,
         expand_universe: bool = False,
+        headline_id: str = "",
     ) -> bool:
         """
         Record a catalyst event for sym.
@@ -577,6 +695,9 @@ class CatalystEngine:
         If sym is not in the universe:
           - expand_universe=True and score >= MIN_CATALYST_SCORE → add it
           - otherwise → silently skip
+
+        For high-scoring headlines, refines the score via Claude LLM to catch
+        context keyword matching misses (e.g. "did NOT meet endpoint", disguised offerings).
 
         Returns True if the event was recorded, False if skipped.
         """
@@ -587,6 +708,17 @@ class CatalystEngine:
 
         # Skip single-letter and common-word false-positives
         if len(sym) <= 1 or sym in _COMMON_WORDS:
+            return False
+
+        # LLM refinement: only for headlines that passed the keyword threshold.
+        # This catches false positives (bad context) and false negatives (negative news
+        # that matched a positive keyword like "phase" in "did not meet phase 3 endpoint").
+        if score >= MIN_CATALYST_SCORE:
+            cache_key = headline_id or f"{sym}:{headline[:80]}"
+            score = self._llm_refine_score(cache_key, sym, headline, score)
+
+        # After LLM refinement, re-check score threshold
+        if score == 0:
             return False
 
         universe_set = set(self._universe.get_tickers())
