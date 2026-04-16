@@ -17,6 +17,11 @@ load_dotenv()
 def run():
     from utils.logging_setup import setup_logging
     setup_logging()
+    logger.warning("=" * 60)
+    logger.warning("AGGRESSIVE SCAN — DISABLED (Elite V.7 paused)")
+    logger.warning("Re-enable manually before running.")
+    logger.warning("=" * 60)
+    return
 
     try:
         from data.broker.schwab_auth import get_schwab_client

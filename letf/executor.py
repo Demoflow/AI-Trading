@@ -83,6 +83,12 @@ class LETFExecutor:
             bal = d.get("securitiesAccount", {}).get("currentBalances", {})
             avail = bal.get("availableFundsNonMarginableTrade", 0)
             cash = bal.get("cashBalance", 0)
+            # IRA/retirement accounts: API sometimes returns availableFunds=0 with a
+            # lag even after settlement. Fall back to cashBalance when available=0
+            # but there is cash — Schwab UI shows it settled, API is just slow.
+            if avail <= 0 and cash > 0:
+                avail = cash
+                logger.info(f"Settlement API lag: using cashBalance ${cash:,.2f} as available")
             unsettled = cash - avail if cash > avail else 0
             if unsettled > 0:
                 logger.info(f"Settlement: cash=${cash:,.2f} available=${avail:,.2f} unsettled=${unsettled:,.2f}")
@@ -183,7 +189,7 @@ class LETFExecutor:
             "entry_price": round(price, 2),
             "entry_cost": round(cost, 2),
             "entry_date": date.today().isoformat(),
-            "settlement_date": (date.today() + __import__('datetime').timedelta(days=1)).isoformat(),
+            "settlement_date": (date.today() + timedelta(days=1)).isoformat(),
             "entry_time": datetime.now().isoformat(),
             "status": "OPEN",
             "peak_price": round(price, 2),
@@ -191,6 +197,8 @@ class LETFExecutor:
             "direction": analysis.get("direction", ""),
             "conviction": analysis.get("score", 0),
             "leverage": analysis.get("leverage", 3),
+            "single_stock": analysis.get("single_stock", False),
+            "max_hold_days": analysis.get("max_hold_days", None),
         }
         self.portfolio["positions"].append(position)
         self.portfolio["cash"] -= cost
@@ -250,10 +258,12 @@ class LETFExecutor:
         real_cash = bal["cash"]
 
         # Update config
-        config = json.load(open(self.config_path))
+        with open(self.config_path) as _f:
+            config = json.load(_f)
         config["equity"] = real_equity
         config["cash"] = real_cash
-        json.dump(config, open(self.config_path, "w"), indent=2)
+        with open(self.config_path, "w") as _f:
+            json.dump(config, _f, indent=2)
 
         # Update portfolio
         self.portfolio["equity"] = real_equity
@@ -269,13 +279,15 @@ class LETFExecutor:
             return False
 
         equity = bal["equity"]
-        config = json.load(open(self.config_path))
+        with open(self.config_path) as _f:
+            config = json.load(_f)
         peak = config.get("peak_equity", equity)
 
         # Update peak
         if equity > peak:
             config["peak_equity"] = equity
-            json.dump(config, open(self.config_path, "w"), indent=2)
+            with open(self.config_path, "w") as _f:
+                json.dump(config, _f, indent=2)
             return False
 
         drawdown = (equity - peak) / peak

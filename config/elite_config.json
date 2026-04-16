@@ -1,0 +1,12 @@
+{
+  "account_number": "28135437",
+  "account_type": "CASH",
+  "account_converting": false,
+  "notes": "Account converting from margin to cash. Set account_converting=false once conversion is confirmed complete. In cash account mode: only NAKED_LONG options allowed (long calls/puts with settled cash). No credit spreads, no debit spreads, no naked short options.",
+  "allowed_strategies": ["NAKED_LONG"],
+  "equity": 7459.76,
+  "max_position_pct": 0.12,
+  "max_positions": 10,
+  "cash_reserve_pct": 0.05,
+  "settlement_days": 1
+}

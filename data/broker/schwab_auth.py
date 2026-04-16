@@ -19,12 +19,54 @@ SCHWAB_TOKEN_PATH = os.getenv(
 )
 
 
+def _check_token_age():
+    """
+    Log how many days remain before the Schwab refresh token expires (7-day window).
+    Warns at <3 days remaining so the user knows to re-authenticate before the
+    next trading day.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt, timezone as _tz
+
+    p = _Path(SCHWAB_TOKEN_PATH)
+    if not p.exists():
+        return
+    try:
+        with open(p) as f:
+            tok = _json.load(f)
+        created_ts = tok.get("creation_timestamp")
+        if created_ts is None:
+            return
+        age_days = (_dt.now(_tz.utc).timestamp() - created_ts) / 86400
+        days_left = 7.0 - age_days
+        if days_left < 0:
+            logger.error(
+                f"Schwab refresh token EXPIRED ({age_days:.1f} days old). "
+                f"Run: python scripts/authenticate_schwab.py"
+            )
+        elif days_left < 3:
+            logger.warning(
+                f"Schwab refresh token expires in {days_left:.1f} day(s). "
+                f"Re-authenticate soon: python scripts/authenticate_schwab.py"
+            )
+        else:
+            logger.info(
+                f"Schwab token age: {age_days:.1f}d | "
+                f"{days_left:.1f} day(s) until re-auth required"
+            )
+    except Exception:
+        pass
+
+
 def get_schwab_client():
     from schwab import auth
     from pathlib import Path
 
     if not SCHWAB_API_KEY or not SCHWAB_APP_SECRET:
         raise ValueError("Set SCHWAB_API_KEY and APP_SECRET")
+
+    _check_token_age()
 
     if Path(SCHWAB_TOKEN_PATH).exists():
         try:

@@ -13,8 +13,8 @@ class SectorAnalyzer:
 
     def reset_cache(self):
         """Reset cached data for new scan cycle."""
-        SectorAnalyzer._spy_cache = None
-        SectorAnalyzer._vix_cache = None
+        self._spy_cache = None
+        self._vix_cache = None
 
 
     def __init__(self, client):
@@ -49,7 +49,7 @@ class SectorAnalyzer:
         underlying = sector_info["underlying"]
         quote = self._get_quote(underlying)
         if not quote:
-            return {"bull_score": 0, "bear_score": 0, "signals": {}}
+            return {"sector": sector_name, "bull_score": 0, "bear_score": 0, "signals": {}}
 
         price = quote.get("lastPrice", 0)
         change_pct = quote.get("netPercentChangeInDouble", 0)

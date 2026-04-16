@@ -1,14 +1,15 @@
 """
-Elite Strategy Engine v2.
-Evaluates SIX strategy types:
-1. Naked Long (low IV, strong directional)
-2. Debit Spread (moderate IV, capital efficient)
-3. Credit Spread (high IV, theta harvesting)
-4. Calendar Spread (IV skew plays)
-5. Broken Wing Butterfly (high IV, zero-risk one side)
-6. Dual-Strategy (layered positions for max flow signals)
+Elite Strategy Engine v2 — Cash Account Mode.
+Account 28135437 is a CASH account. Only NAKED_LONG is permitted.
 
-Uses expected move calculation for precise strike targeting.
+Cash account rules:
+- Only buy long calls/puts with fully settled funds (T+1)
+- No credit spreads (require margin/short option)
+- No naked short options (require margin)
+- No debit spreads (blocked pending cash account review)
+- No GFV: never buy with proceeds from unsettled sales
+
+All non-cash strategies are blocked in BLOCKED_STRATEGIES.
 """
 
 import math

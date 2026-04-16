@@ -1,0 +1,14 @@
+{
+  "trading_system_path": "C:/Users/User/Desktop/trading_system",
+  "scalper_state_file": "C:/Users/User/Desktop/trading_system/config/paper_scalp.json",
+  "log_dir": "C:/Users/User/Desktop/trading_system/logs",
+  "journal_file": "C:/Users/User/Desktop/trading_system/journal.md",
+  "channel": "telegram",
+  "alert_thresholds": {
+    "daily_pnl_alert": 500,
+    "daily_loss_halt": 1000,
+    "win_rate_warning": 40,
+    "vix_spike_points": 3,
+    "spy_gap_pct": 1.0
+  }
+}

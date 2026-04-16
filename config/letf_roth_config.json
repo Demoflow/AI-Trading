@@ -1,8 +1,8 @@
 {
   "account_hash": "B224A0366CF84A4D9097E3300BE77C539C479E63DD8D3D128E05D365049A701C",
   "account_number": "30178960",
-  "equity": 11566.03,
-  "cash": 11566.03,
+  "equity": 12203.53,
+  "cash": 12203.53,
   "max_position_pct": 0.12,
   "max_positions": 10,
   "max_portfolio_heat": 0.9,
@@ -14,6 +14,6 @@
   "trailing_stop_2x": 0.03,
   "profit_target_3x": 0.12,
   "profit_target_2x": 0.08,
-  "peak_equity": 11706.71,
+  "peak_equity": 12216.03,
   "weekly_drawdown_halt_pct": 0.1
 }

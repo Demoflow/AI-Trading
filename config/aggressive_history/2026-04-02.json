@@ -1,0 +1,718 @@
+{
+  "date": "2026-04-02",
+  "equity": 7459.76,
+  "mode": "ELITE_v6_GEX_EV",
+  "vix": 23.87,
+  "vol_regime": {
+    "level": "HIGH",
+    "trend": "STABLE",
+    "signal": "NEUTRAL",
+    "strategy_bias": "ANY",
+    "size_modifier": 1.0,
+    "current_vix": 23.87
+  },
+  "regime": "TRENDING_DOWN",
+  "trades": [
+    {
+      "symbol": "HIMS",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "HIMS  260424C00019000",
+            "desc": "HIMS 04/24/2026 19.00 C",
+            "strike": 19.0,
+            "dte": 22,
+            "delta": 0.555,
+            "iv": 78.3,
+            "bid": 1.53,
+            "ask": 1.62,
+            "mid": 1.58,
+            "spread_pct": 0.0571,
+            "qty": 3,
+            "total_cost": 472.5,
+            "oi": 195,
+            "volume": 520,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 1.58,
+        "max_loss": 1.58,
+        "max_profit": "unlimited",
+        "breakeven": 20.58,
+        "qty": 3,
+        "total_cost": 472.5,
+        "description": "Long 19.0 CALL"
+      },
+      "analysis": {
+        "symbol": "HIMS",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 94,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 9.454930322808258,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 90,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 252.71,
+        "ev_ratio": 0.5348,
+        "prob_profit": 0.735,
+        "prob_max": 0.184,
+        "risk_reward": 3.78,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.78,
+        "avg_loss": 0.95
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 8,
+        "cp_ratio": 2.51,
+        "total_premium": 1394780.0,
+        "opening_pct": 45.5
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "PYPL",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "PYPL  260501C00045000",
+            "desc": "PYPL 05/01/2026 45.00 C",
+            "strike": 45.0,
+            "dte": 29,
+            "delta": 0.551,
+            "iv": 41.2,
+            "bid": 2.29,
+            "ask": 2.52,
+            "mid": 2.41,
+            "spread_pct": 0.0956,
+            "qty": 2,
+            "total_cost": 481.0,
+            "oi": 330,
+            "volume": 44,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.41,
+        "max_loss": 2.41,
+        "max_profit": "unlimited",
+        "breakeven": 47.41,
+        "qty": 2,
+        "total_cost": 481.0,
+        "description": "Long 45.0 CALL"
+      },
+      "analysis": {
+        "symbol": "PYPL",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 86,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 16.590886939571153,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 90,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 242.39,
+        "ev_ratio": 0.5039,
+        "prob_profit": 0.731,
+        "prob_max": 0.183,
+        "risk_reward": 2.66,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.85,
+        "avg_loss": 1.45
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 7,
+        "cp_ratio": 6.63,
+        "total_premium": 3229052.0,
+        "opening_pct": 74.7
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "BAC",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 87,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 73,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "BAC   260417C00049000",
+            "desc": "BAC 04/17/2026 49.00 C",
+            "strike": 49.0,
+            "dte": 15,
+            "delta": 0.553,
+            "iv": 36.3,
+            "bid": 1.67,
+            "ask": 1.75,
+            "mid": 1.71,
+            "spread_pct": 0.0468,
+            "qty": 3,
+            "total_cost": 513.0,
+            "oi": 2795,
+            "volume": 849,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 1.71,
+        "max_loss": 1.71,
+        "max_profit": "unlimited",
+        "breakeven": 50.71,
+        "qty": 3,
+        "total_cost": 513.0,
+        "description": "Long 49.0 CALL"
+      },
+      "analysis": {
+        "symbol": "BAC",
+        "price": 0,
+        "composite": 87,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 70,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 66.4692668981009,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 43.5,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 237.52,
+        "ev_ratio": 0.463,
+        "prob_profit": 0.663,
+        "prob_max": 0.166,
+        "risk_reward": 4.0,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.1,
+        "avg_loss": 1.03
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 1.2,
+        "total_premium": 1218362.0,
+        "opening_pct": 44.0
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "OXY",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 105,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "OXY   260501C00064000",
+            "desc": "OXY 05/01/2026 64.00 C",
+            "strike": 64.0,
+            "dte": 29,
+            "delta": 0.471,
+            "iv": 43.0,
+            "bid": 2.51,
+            "ask": 2.65,
+            "mid": 2.58,
+            "spread_pct": 0.0543,
+            "qty": 2,
+            "total_cost": 516.0,
+            "oi": 1616,
+            "volume": 900,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.58,
+        "max_loss": 2.58,
+        "max_profit": "unlimited",
+        "breakeven": 66.58,
+        "qty": 2,
+        "total_cost": 516.0,
+        "description": "Long 64.0 CALL"
+      },
+      "analysis": {
+        "symbol": "OXY",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 94,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 86.07071789377008,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 23.9,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 231.74,
+        "ev_ratio": 0.4491,
+        "prob_profit": 0.681,
+        "prob_max": 0.17,
+        "risk_reward": 2.67,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.13,
+        "avg_loss": 1.55
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 8,
+        "cp_ratio": 4.26,
+        "total_premium": 2593452.0,
+        "opening_pct": 42.1
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "MRVL",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 105,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "MRVL  260417C00107000",
+            "desc": "MRVL 04/17/2026 107.00 C",
+            "strike": 107.0,
+            "dte": 15,
+            "delta": 0.523,
+            "iv": 58.2,
+            "bid": 4.8,
+            "ask": 5.55,
+            "mid": 5.17,
+            "spread_pct": 0.1449,
+            "qty": 1,
+            "total_cost": 517.5,
+            "oi": 346,
+            "volume": 600,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 5.17,
+        "max_loss": 5.17,
+        "max_profit": "unlimited",
+        "breakeven": 112.17,
+        "qty": 1,
+        "total_cost": 517.5,
+        "description": "Long 107.0 CALL"
+      },
+      "analysis": {
+        "symbol": "MRVL",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 94,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 98.45280223849889,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 11.5,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 220.64,
+        "ev_ratio": 0.4264,
+        "prob_profit": 0.733,
+        "prob_max": 0.183,
+        "risk_reward": 1.33,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.14,
+        "avg_loss": 3.1
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 8,
+        "cp_ratio": 2.53,
+        "total_premium": 3513041.0,
+        "opening_pct": 41.1
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "DAL",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 95,
+        "direction": "PUT",
+        "contracts": [
+          {
+            "symbol": "DAL   260424P00069000",
+            "desc": "DAL 04/24/2026 69.00 P",
+            "strike": 69.0,
+            "dte": 22,
+            "delta": 0.576,
+            "iv": 55.4,
+            "bid": 4.6,
+            "ask": 4.9,
+            "mid": 4.75,
+            "spread_pct": 0.0632,
+            "qty": 1,
+            "total_cost": 475.0,
+            "oi": 226,
+            "volume": 1,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 4.75,
+        "max_loss": 4.75,
+        "max_profit": "unlimited",
+        "breakeven": 64.25,
+        "qty": 1,
+        "total_cost": 475.0,
+        "description": "Long 69.0 PUT"
+      },
+      "analysis": {
+        "symbol": "DAL",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "PUT",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 86,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 77.02556715880445,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 33.0,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 217.74,
+        "ev_ratio": 0.4584,
+        "prob_profit": 0.756,
+        "prob_max": 0.189,
+        "risk_reward": 1.33,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.8,
+        "avg_loss": 2.85
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 7,
+        "cp_ratio": 0.66,
+        "total_premium": 3620157.0,
+        "opening_pct": 45.9
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "DKNG",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 85,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 53,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "DKNG  260501C00023000",
+            "desc": "DKNG 05/01/2026 23.00 C",
+            "strike": 23.0,
+            "dte": 29,
+            "delta": 0.549,
+            "iv": 53.3,
+            "bid": 1.46,
+            "ask": 1.6,
+            "mid": 1.53,
+            "spread_pct": 0.0915,
+            "qty": 3,
+            "total_cost": 459.0,
+            "oi": 64,
+            "volume": 42,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 1.53,
+        "max_loss": 1.53,
+        "max_profit": "unlimited",
+        "breakeven": 24.53,
+        "qty": 3,
+        "total_cost": 459.0,
+        "description": "Long 23.0 CALL"
+      },
+      "analysis": {
+        "symbol": "DKNG",
+        "price": 0,
+        "composite": 85,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 70,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 8.765889830508469,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 90,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 210.68,
+        "ev_ratio": 0.459,
+        "prob_profit": 0.659,
+        "prob_max": 0.165,
+        "risk_reward": 3.67,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.67,
+        "avg_loss": 0.92
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 5,
+        "cp_ratio": 3.21,
+        "total_premium": 396876.0,
+        "opening_pct": 51.2
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "NKE",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "NKE   260417C00044000",
+            "desc": "NKE 04/17/2026 44.00 C",
+            "strike": 44.0,
+            "dte": 15,
+            "delta": 0.532,
+            "iv": 34.6,
+            "bid": 1.33,
+            "ask": 1.4,
+            "mid": 1.36,
+            "spread_pct": 0.0513,
+            "qty": 3,
+            "total_cost": 409.5,
+            "oi": 341,
+            "volume": 3351,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 1.36,
+        "max_loss": 1.36,
+        "max_profit": "unlimited",
+        "breakeven": 45.36,
+        "qty": 3,
+        "total_cost": 409.5,
+        "description": "Long 44.0 CALL"
+      },
+      "analysis": {
+        "symbol": "NKE",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 78,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 2.1092039464792456,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 90,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 209.75,
+        "ev_ratio": 0.5122,
+        "prob_profit": 0.712,
+        "prob_max": 0.178,
+        "risk_reward": 3.28,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.28,
+        "avg_loss": 0.82
+      },
+      "vol_regime": {
+        "level": "HIGH",
+        "trend": "STABLE",
+        "signal": "NEUTRAL",
+        "strategy_bias": "ANY",
+        "size_modifier": 1.0,
+        "current_vix": 23.87
+      },
+      "flow_summary": {
+        "strength": 6,
+        "cp_ratio": 1.36,
+        "total_premium": 33259341.0,
+        "opening_pct": 85.8
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    }
+  ],
+  "total_cost": 3843.5,
+  "kelly_size_pct": 5.0,
+  "deployment_pct": 51.5,
+  "skipped": {
+    "existing": 0,
+    "corr": 53,
+    "filter": 0,
+    "low_score": 66,
+    "no_strategy": 3,
+    "negative_ev": 0
+  },
+  "universe_size": 156,
+  "flow_signals": 147
+}

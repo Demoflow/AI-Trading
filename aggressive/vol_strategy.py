@@ -1,7 +1,7 @@
 """
-Volatility Regime Strategy Selector.
-Adjusts strategy selection based on VIX level and direction.
-At VIX extremes, pure volatility trades have better EV than directional.
+Volatility Regime Strategy Selector — Cash Account Mode.
+Only NAKED_LONG is permitted. All premium-selling and spread strategies
+are blocked. Score adjustments only apply to NAKED_LONG.
 """
 from loguru import logger
 
@@ -13,6 +13,7 @@ class VolatilityStrategySelector:
         """
         Classify the volatility regime.
         Returns: regime dict with strategy bias and modifiers.
+        Cash account: NAKED_LONG is always preferred, size shrinks with VIX.
         """
         if vix_5d_ago:
             vix_direction = "RISING" if vix > vix_5d_ago * 1.10 else (
@@ -26,55 +27,55 @@ class VolatilityStrategySelector:
                 "regime": "EXTREME_LOW_VOL",
                 "vix": vix,
                 "direction": vix_direction,
-                "strategy_bias": "BUY_VOLATILITY",
-                "preferred_strategies": ["STRADDLE_BUY", "STRANGLE_BUY", "RATIO_BACKSPREAD"],
-                "avoid_strategies": ["NAKED_LONG", "CREDIT_SPREAD"],
-                "size_modifier": 0.75,  # Smaller size - waiting for vol expansion
-                "description": "VIX extremely low. Buy volatility - expansion imminent.",
+                "strategy_bias": "NAKED_LONG",
+                "preferred_strategies": ["NAKED_LONG"],
+                "avoid_strategies": [],
+                "size_modifier": 0.75,
+                "description": "VIX extremely low. Options cheap, buy directional.",
             }
         elif vix < 18:
             return {
                 "regime": "LOW_VOL",
                 "vix": vix,
                 "direction": vix_direction,
-                "strategy_bias": "DIRECTIONAL_CHEAP",
-                "preferred_strategies": ["NAKED_LONG", "RISK_REVERSAL", "DIAGONAL_SPREAD"],
-                "avoid_strategies": ["CREDIT_SPREAD"],
+                "strategy_bias": "NAKED_LONG",
+                "preferred_strategies": ["NAKED_LONG"],
+                "avoid_strategies": [],
                 "size_modifier": 1.0,
-                "description": "Low VIX. Options are cheap. Buy directional.",
+                "description": "Low VIX. Options cheap. Buy directional.",
             }
         elif vix < 25:
             return {
                 "regime": "NORMAL_VOL",
                 "vix": vix,
                 "direction": vix_direction,
-                "strategy_bias": "BALANCED",
-                "preferred_strategies": ["DEBIT_SPREAD", "DIAGONAL_SPREAD", "RISK_REVERSAL"],
+                "strategy_bias": "NAKED_LONG",
+                "preferred_strategies": ["NAKED_LONG"],
                 "avoid_strategies": [],
                 "size_modifier": 1.0,
-                "description": "Normal VIX. All strategies available.",
+                "description": "Normal VIX. Buy directional with full size.",
             }
         elif vix < 32:
             return {
                 "regime": "HIGH_VOL",
                 "vix": vix,
                 "direction": vix_direction,
-                "strategy_bias": "SELL_PREMIUM",
-                "preferred_strategies": ["DEBIT_SPREAD", "CREDIT_SPREAD", "SHORT_STRANGLE"],
-                "avoid_strategies": ["NAKED_LONG"],
-                "size_modifier": 0.85,
-                "description": "High VIX. Options expensive. Use spreads, sell premium.",
+                "strategy_bias": "NAKED_LONG",
+                "preferred_strategies": ["NAKED_LONG"],
+                "avoid_strategies": [],
+                "size_modifier": 0.80,
+                "description": "High VIX. Options expensive — reduce size, buy puts on weakness.",
             }
         else:
             return {
                 "regime": "EXTREME_HIGH_VOL",
                 "vix": vix,
                 "direction": vix_direction,
-                "strategy_bias": "SELL_VOLATILITY",
-                "preferred_strategies": ["CREDIT_SPREAD", "SHORT_STRANGLE", "NAKED_PUT"],
-                "avoid_strategies": ["NAKED_LONG", "STRADDLE_BUY"],
-                "size_modifier": 0.70,
-                "description": "VIX extreme. Sell premium. Use defined-risk spreads only.",
+                "strategy_bias": "NAKED_LONG",
+                "preferred_strategies": ["NAKED_LONG"],
+                "avoid_strategies": [],
+                "size_modifier": 0.60,
+                "description": "VIX extreme. Reduce size significantly, only highest-conviction puts.",
             }
 
     @staticmethod

@@ -2,47 +2,305 @@
   "scan_date": "",
   "candidates": [
     {
-      "symbol": "XPEV",
-      "direction": "BULLISH",
+      "symbol": "PINS",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 91,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "PINS  260508C00020000",
+            "desc": "PINS 05/08/2026 20.00 C",
+            "strike": 20.0,
+            "dte": 23,
+            "delta": 0.571,
+            "iv": 79.5,
+            "bid": 1.76,
+            "ask": 1.85,
+            "mid": 1.81,
+            "spread_pct": 0.0499,
+            "qty": 3,
+            "total_cost": 541.5,
+            "oi": 703,
+            "volume": 503,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 1.81,
+        "max_loss": 1.81,
+        "max_profit": "unlimited",
+        "breakeven": 21.81,
+        "qty": 3,
+        "total_cost": 541.5,
+        "description": "Long 20.0 CALL"
+      },
+      "analysis": {
+        "symbol": "PINS",
+        "price": 0,
+        "composite": 91,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 78,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 24.683786891529326,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 75.3,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 298.29,
+        "ev_ratio": 0.5509,
+        "prob_profit": 0.751,
+        "prob_max": 0.188,
+        "risk_reward": 3.99,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.33,
+        "avg_loss": 1.09
+      },
+      "vol_regime": {
+        "level": "MODERATE",
+        "trend": "FALLING",
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
+      },
+      "flow_summary": {
+        "strength": 6,
+        "cp_ratio": 3.25,
+        "total_premium": 115677.0,
+        "opening_pct": 30.3
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "RIVN",
+      "direction": "CALL",
       "conviction": "HIGH",
       "composite": 100,
       "strategy": {
         "type": "NAKED_LONG",
-        "score": 45,
-        "direction": "BULLISH",
+        "score": 70,
+        "direction": "CALL",
         "contracts": [
           {
-            "symbol": "XPEV  260417P00018000",
-            "desc": "XPEV 04/17/2026 18.00 P",
-            "strike": 18.0,
-            "dte": 15,
-            "delta": 0.567,
-            "iv": 54.9,
-            "bid": 1.0,
-            "ask": 1.07,
-            "mid": 1.04,
-            "spread_pct": 0.0676,
+            "symbol": "RIVN  260515C00016000",
+            "desc": "RIVN 05/15/2026 16.00 C",
+            "strike": 16.0,
+            "dte": 30,
+            "delta": 0.593,
+            "iv": 77.0,
+            "bid": 1.67,
+            "ask": 1.73,
+            "mid": 1.7,
+            "spread_pct": 0.0353,
             "qty": 3,
-            "total_cost": 310.5,
-            "oi": 2448,
-            "volume": 37,
+            "total_cost": 510.0,
+            "oi": 9842,
+            "volume": 505,
             "leg": "LONG"
           }
         ],
-        "net_debit": 1.04,
-        "max_loss": 1.04,
+        "net_debit": 1.7,
+        "max_loss": 1.7,
         "max_profit": "unlimited",
-        "breakeven": 16.96,
+        "breakeven": 17.7,
         "qty": 3,
-        "total_cost": 310.5,
-        "description": "Long 18.0 BULLISH"
+        "total_cost": 510.0,
+        "description": "Long 16.0 CALL"
       },
       "analysis": {
-        "symbol": "XPEV",
+        "symbol": "RIVN",
         "price": 0,
         "composite": 100,
         "conviction": "HIGH",
-        "direction": "BULLISH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 94,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 47.0962837837838,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 52.9,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 292.23,
+        "ev_ratio": 0.573,
+        "prob_profit": 0.773,
+        "prob_max": 0.193,
+        "risk_reward": 4.0,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.08,
+        "avg_loss": 1.02
+      },
+      "vol_regime": {
+        "level": "MODERATE",
+        "trend": "FALLING",
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
+      },
+      "flow_summary": {
+        "strength": 8,
+        "cp_ratio": 3.83,
+        "total_premium": 698098.0,
+        "opening_pct": 45.9
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "U",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "U     260515C00025000",
+            "desc": "U 05/15/2026 25.00 C",
+            "strike": 25.0,
+            "dte": 30,
+            "delta": 0.57,
+            "iv": 85.8,
+            "bid": 2.63,
+            "ask": 2.76,
+            "mid": 2.69,
+            "spread_pct": 0.0482,
+            "qty": 2,
+            "total_cost": 539.0,
+            "oi": 5980,
+            "volume": 740,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.69,
+        "max_loss": 2.69,
+        "max_profit": "unlimited",
+        "breakeven": 27.69,
+        "qty": 2,
+        "total_cost": 539.0,
+        "description": "Long 25.0 CALL"
+      },
+      "analysis": {
+        "symbol": "U",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 102,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 24.28611817924795,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 75.7,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 283.05,
+        "ev_ratio": 0.5251,
+        "prob_profit": 0.75,
+        "prob_max": 0.187,
+        "risk_reward": 2.67,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 4.31,
+        "avg_loss": 1.61
+      },
+      "vol_regime": {
+        "level": "MODERATE",
+        "trend": "FALLING",
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
+      },
+      "flow_summary": {
+        "strength": 9,
+        "cp_ratio": 4.4,
+        "total_premium": 1314173.0,
+        "opening_pct": 49.2
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "O",
+      "direction": "PUT",
+      "conviction": "HIGH",
+      "composite": 100,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 95,
+        "direction": "PUT",
+        "contracts": [
+          {
+            "symbol": "O     260515P00065000",
+            "desc": "O 05/15/2026 65.00 P",
+            "strike": 65.0,
+            "dte": 30,
+            "delta": 0.626,
+            "iv": 20.4,
+            "bid": 1.95,
+            "ask": 2.2,
+            "mid": 2.08,
+            "spread_pct": 0.1205,
+            "qty": 2,
+            "total_cost": 415.0,
+            "oi": 199,
+            "volume": 38,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.08,
+        "max_loss": 2.08,
+        "max_profit": "unlimited",
+        "breakeven": 62.92,
+        "qty": 2,
+        "total_cost": 415.0,
+        "description": "Long 65.0 PUT"
+      },
+      "analysis": {
+        "symbol": "O",
+        "price": 0,
+        "composite": 100,
+        "conviction": "HIGH",
+        "direction": "PUT",
         "size_pct": 0.05,
         "sub_scores": {
           "flow": 86,
@@ -50,171 +308,171 @@
           "tech_penalty": 0
         },
         "levels": {
-          "rsi": 17.268901352791552,
+          "rsi": 69.50350424197713,
           "support": 0,
           "resistance": 0,
           "atr": 0
         }
       },
-      "iv_rank": 90,
+      "iv_rank": 30.5,
       "gex": null,
       "ev": {
-        "ev_dollar": 169.77,
-        "ev_ratio": 0.5468,
-        "prob_profit": 0.747,
-        "prob_max": 0.187,
-        "risk_reward": 2.48,
+        "ev_dollar": 243.38,
+        "ev_ratio": 0.5865,
+        "prob_profit": 0.806,
+        "prob_max": 0.201,
+        "risk_reward": 2.66,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.48,
-        "avg_loss": 0.62
+        "avg_win": 3.32,
+        "avg_loss": 1.25
       },
       "vol_regime": {
-        "level": "HIGH",
+        "level": "MODERATE",
         "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
       },
       "flow_summary": {
         "strength": 7,
-        "cp_ratio": 3.23,
-        "total_premium": 382700.0,
-        "opening_pct": 66.9
+        "cp_ratio": 0.29,
+        "total_premium": 89395.0,
+        "opening_pct": 65.9
+      },
+      "entry_price": 0,
+      "max_hold_days": 30
+    },
+    {
+      "symbol": "TTD",
+      "direction": "CALL",
+      "conviction": "HIGH",
+      "composite": 91,
+      "strategy": {
+        "type": "NAKED_LONG",
+        "score": 60,
+        "direction": "CALL",
+        "contracts": [
+          {
+            "symbol": "TTD   260515C00022500",
+            "desc": "TTD 05/15/2026 22.50 C",
+            "strike": 22.5,
+            "dte": 30,
+            "delta": 0.548,
+            "iv": 94.1,
+            "bid": 2.32,
+            "ask": 2.4,
+            "mid": 2.36,
+            "spread_pct": 0.0339,
+            "qty": 2,
+            "total_cost": 472.0,
+            "oi": 2442,
+            "volume": 654,
+            "leg": "LONG"
+          }
+        ],
+        "net_debit": 2.36,
+        "max_loss": 2.36,
+        "max_profit": "unlimited",
+        "breakeven": 24.86,
+        "qty": 2,
+        "total_cost": 472.0,
+        "description": "Long 22.5 CALL"
+      },
+      "analysis": {
+        "symbol": "TTD",
+        "price": 0,
+        "composite": 91,
+        "conviction": "HIGH",
+        "direction": "CALL",
+        "size_pct": 0.05,
+        "sub_scores": {
+          "flow": 78,
+          "tech_bonus": 2,
+          "tech_penalty": 0
+        },
+        "levels": {
+          "rsi": 3.6953005159670926,
+          "support": 0,
+          "resistance": 0,
+          "atr": 0
+        }
+      },
+      "iv_rank": 95,
+      "gex": null,
+      "ev": {
+        "ev_dollar": 236.38,
+        "ev_ratio": 0.5008,
+        "prob_profit": 0.728,
+        "prob_max": 0.182,
+        "risk_reward": 2.67,
+        "kelly_fraction": 0.1,
+        "grade": "A",
+        "is_positive": true,
+        "avg_win": 3.78,
+        "avg_loss": 1.42
+      },
+      "vol_regime": {
+        "level": "MODERATE",
+        "trend": "FALLING",
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
+      },
+      "flow_summary": {
+        "strength": 6,
+        "cp_ratio": 3.87,
+        "total_premium": 303018.0,
+        "opening_pct": 28.9
       },
       "entry_price": 0,
       "max_hold_days": 30
     },
     {
       "symbol": "NKE",
-      "direction": "NEUTRAL",
+      "direction": "CALL",
       "conviction": "HIGH",
       "composite": 100,
       "strategy": {
         "type": "NAKED_LONG",
-        "score": 45,
-        "direction": "NEUTRAL",
+        "score": 60,
+        "direction": "CALL",
         "contracts": [
           {
-            "symbol": "NKE   260417P00045000",
-            "desc": "NKE 04/17/2026 45.00 P",
+            "symbol": "NKE   260515C00045000",
+            "desc": "NKE 05/15/2026 45.00 C",
             "strike": 45.0,
-            "dte": 15,
-            "delta": 0.519,
-            "iv": 39.2,
-            "bid": 1.51,
-            "ask": 1.59,
-            "mid": 1.55,
-            "spread_pct": 0.0516,
+            "dte": 30,
+            "delta": 0.568,
+            "iv": 32.7,
+            "bid": 2.08,
+            "ask": 2.1,
+            "mid": 2.09,
+            "spread_pct": 0.0096,
             "qty": 2,
-            "total_cost": 310.0,
-            "oi": 1989,
-            "volume": 4105,
+            "total_cost": 418.0,
+            "oi": 95442,
+            "volume": 10463,
             "leg": "LONG"
           }
         ],
-        "net_debit": 1.55,
-        "max_loss": 1.55,
+        "net_debit": 2.09,
+        "max_loss": 2.09,
         "max_profit": "unlimited",
-        "breakeven": 43.45,
+        "breakeven": 47.09,
         "qty": 2,
-        "total_cost": 310.0,
-        "description": "Long 45.0 NEUTRAL"
+        "total_cost": 418.0,
+        "description": "Long 45.0 CALL"
       },
       "analysis": {
         "symbol": "NKE",
         "price": 0,
         "composite": 100,
         "conviction": "HIGH",
-        "direction": "NEUTRAL",
-        "size_pct": 0.05,
-        "sub_scores": {
-          "flow": 78,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 0.4957168936946979,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 90,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 145.36,
-        "ev_ratio": 0.4689,
-        "prob_profit": 0.699,
-        "prob_max": 0.175,
-        "risk_reward": 2.48,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.48,
-        "avg_loss": 0.93
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
-      },
-      "flow_summary": {
-        "strength": 6,
-        "cp_ratio": 1.11,
-        "total_premium": 68195914.0,
-        "opening_pct": 81.0
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "OXY",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 80,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "OXY   260501P00063000",
-            "desc": "OXY 05/01/2026 63.00 P",
-            "strike": 63.0,
-            "dte": 29,
-            "delta": 0.511,
-            "iv": 41.9,
-            "bid": 3.0,
-            "ask": 3.3,
-            "mid": 3.15,
-            "spread_pct": 0.0952,
-            "qty": 1,
-            "total_cost": 315.0,
-            "oi": 80,
-            "volume": 23,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 3.15,
-        "max_loss": 3.15,
-        "max_profit": "unlimited",
-        "breakeven": 59.85,
-        "qty": 1,
-        "total_cost": 315.0,
-        "description": "Long 63.0 BULLISH"
-      },
-      "analysis": {
-        "symbol": "OXY",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
+        "direction": "CALL",
         "size_pct": 0.05,
         "sub_scores": {
           "flow": 94,
@@ -222,343 +480,85 @@
           "tech_penalty": 0
         },
         "levels": {
-          "rsi": 82.09092300627583,
+          "rsi": 9.455022980958619,
           "support": 0,
           "resistance": 0,
           "atr": 0
         }
       },
-      "iv_rank": 27.9,
+      "iv_rank": 90.5,
       "gex": null,
       "ev": {
-        "ev_dollar": 128.96,
-        "ev_ratio": 0.4094,
-        "prob_profit": 0.721,
-        "prob_max": 0.18,
-        "risk_reward": 1.33,
+        "ev_dollar": 218.53,
+        "ev_ratio": 0.5228,
+        "prob_profit": 0.748,
+        "prob_max": 0.187,
+        "risk_reward": 2.67,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.52,
-        "avg_loss": 1.89
+        "avg_win": 3.34,
+        "avg_loss": 1.25
       },
       "vol_regime": {
-        "level": "HIGH",
+        "level": "MODERATE",
         "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
       },
       "flow_summary": {
         "strength": 8,
-        "cp_ratio": 4.68,
-        "total_premium": 3878821.0,
-        "opening_pct": 57.4
+        "cp_ratio": 3.81,
+        "total_premium": 2256989.0,
+        "opening_pct": 40.4
       },
       "entry_price": 0,
       "max_hold_days": 30
     },
     {
-      "symbol": "PINS",
-      "direction": "BEARISH",
+      "symbol": "BABA",
+      "direction": "CALL",
       "conviction": "HIGH",
       "composite": 100,
       "strategy": {
         "type": "NAKED_LONG",
-        "score": 45,
-        "direction": "BEARISH",
+        "score": 60,
+        "direction": "CALL",
         "contracts": [
           {
-            "symbol": "PINS  260417P00018500",
-            "desc": "PINS 04/17/2026 18.50 P",
-            "strike": 18.5,
-            "dte": 15,
-            "delta": 0.527,
-            "iv": 48.4,
-            "bid": 0.8,
-            "ask": 0.86,
-            "mid": 0.83,
-            "spread_pct": 0.0723,
-            "qty": 3,
-            "total_cost": 249.0,
-            "oi": 941,
-            "volume": 33,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 0.83,
-        "max_loss": 0.83,
-        "max_profit": "unlimited",
-        "breakeven": 17.67,
-        "qty": 3,
-        "total_cost": 249.0,
-        "description": "Long 18.5 BEARISH"
-      },
-      "analysis": {
-        "symbol": "PINS",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BEARISH",
-        "size_pct": 0.05,
-        "sub_scores": {
-          "flow": 94,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 16.826370256803376,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 90,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 126.24,
-        "ev_ratio": 0.507,
-        "prob_profit": 0.707,
-        "prob_max": 0.177,
-        "risk_reward": 1.99,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 1.99,
-        "avg_loss": 0.5
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
-      },
-      "flow_summary": {
-        "strength": 8,
-        "cp_ratio": 0.16,
-        "total_premium": 739538.0,
-        "opening_pct": 76.5
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "BMY",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 90,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "BMY   260417P00062500",
-            "desc": "BMY 04/17/2026 62.50 P",
-            "strike": 62.5,
-            "dte": 15,
-            "delta": 0.644,
-            "iv": 24.7,
-            "bid": 1.98,
-            "ask": 2.24,
-            "mid": 2.11,
-            "spread_pct": 0.1232,
+            "symbol": "BABA  260501C00133000",
+            "desc": "BABA 05/01/2026 133.00 C",
+            "strike": 133.0,
+            "dte": 16,
+            "delta": 0.537,
+            "iv": 41.3,
+            "bid": 4.9,
+            "ask": 5.25,
+            "mid": 5.08,
+            "spread_pct": 0.069,
             "qty": 1,
-            "total_cost": 211.0,
-            "oi": 216,
-            "volume": 10,
+            "total_cost": 507.5,
+            "oi": 75,
+            "volume": 47,
             "leg": "LONG"
           }
         ],
-        "net_debit": 2.11,
-        "max_loss": 2.11,
+        "net_debit": 5.08,
+        "max_loss": 5.08,
         "max_profit": "unlimited",
-        "breakeven": 60.39,
+        "breakeven": 138.08,
         "qty": 1,
-        "total_cost": 211.0,
-        "description": "Long 62.5 BULLISH"
+        "total_cost": 507.5,
+        "description": "Long 133.0 CALL"
       },
       "analysis": {
-        "symbol": "BMY",
+        "symbol": "BABA",
         "price": 0,
         "composite": 100,
         "conviction": "HIGH",
-        "direction": "BULLISH",
-        "size_pct": 0.05,
-        "sub_scores": {
-          "flow": 94,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 95.64773352187916,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 14.4,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 124.49,
-        "ev_ratio": 0.59,
-        "prob_profit": 0.85,
-        "prob_max": 0.212,
-        "risk_reward": 1.33,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 1.69,
-        "avg_loss": 1.27
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
-      },
-      "flow_summary": {
-        "strength": 8,
-        "cp_ratio": 3.93,
-        "total_premium": 6068029.0,
-        "opening_pct": 56.9
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "SBUX",
-      "direction": "BEARISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 55,
-        "direction": "BEARISH",
-        "contracts": [
-          {
-            "symbol": "SBUX  260424P00091000",
-            "desc": "SBUX 04/24/2026 91.00 P",
-            "strike": 91.0,
-            "dte": 22,
-            "delta": 0.51,
-            "iv": 35.6,
-            "bid": 3.2,
-            "ask": 3.35,
-            "mid": 3.28,
-            "spread_pct": 0.0458,
-            "qty": 1,
-            "total_cost": 327.5,
-            "oi": 153,
-            "volume": 1817,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 3.28,
-        "max_loss": 3.28,
-        "max_profit": "unlimited",
-        "breakeven": 87.72,
-        "qty": 1,
-        "total_cost": 327.5,
-        "description": "Long 91.0 BEARISH"
-      },
-      "analysis": {
-        "symbol": "SBUX",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BEARISH",
-        "size_pct": 0.05,
-        "sub_scores": {
-          "flow": 94,
-          "tech_bonus": 2,
-          "tech_penalty": 0
-        },
-        "levels": {
-          "rsi": 50.64802182810367,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
-      },
-      "iv_rank": 59.4,
-      "gex": null,
-      "ev": {
-        "ev_dollar": 119.77,
-        "ev_ratio": 0.3657,
-        "prob_profit": 0.69,
-        "prob_max": 0.172,
-        "risk_reward": 1.33,
-        "kelly_fraction": 0.1,
-        "grade": "A",
-        "is_positive": true,
-        "avg_win": 2.62,
-        "avg_loss": 1.97
-      },
-      "vol_regime": {
-        "level": "HIGH",
-        "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
-      },
-      "flow_summary": {
-        "strength": 8,
-        "cp_ratio": 0.33,
-        "total_premium": 1757327.0,
-        "opening_pct": 60.2
-      },
-      "entry_price": 0,
-      "max_hold_days": 30
-    },
-    {
-      "symbol": "WFC",
-      "direction": "BULLISH",
-      "conviction": "HIGH",
-      "composite": 100,
-      "strategy": {
-        "type": "NAKED_LONG",
-        "score": 55,
-        "direction": "BULLISH",
-        "contracts": [
-          {
-            "symbol": "WFC   260424P00081000",
-            "desc": "WFC 04/24/2026 81.00 P",
-            "strike": 81.0,
-            "dte": 22,
-            "delta": 0.497,
-            "iv": 41.0,
-            "bid": 3.2,
-            "ask": 3.4,
-            "mid": 3.3,
-            "spread_pct": 0.0606,
-            "qty": 1,
-            "total_cost": 330.0,
-            "oi": 54,
-            "volume": 175,
-            "leg": "LONG"
-          }
-        ],
-        "net_debit": 3.3,
-        "max_loss": 3.3,
-        "max_profit": "unlimited",
-        "breakeven": 77.7,
-        "qty": 1,
-        "total_cost": 330.0,
-        "description": "Long 81.0 BULLISH"
-      },
-      "analysis": {
-        "symbol": "WFC",
-        "price": 0,
-        "composite": 100,
-        "conviction": "HIGH",
-        "direction": "BULLISH",
+        "direction": "CALL",
         "size_pct": 0.05,
         "sub_scores": {
           "flow": 86,
@@ -566,127 +566,166 @@
           "tech_penalty": 0
         },
         "levels": {
-          "rsi": 56.25317742755463,
+          "rsi": 33.82419064748204,
           "support": 0,
           "resistance": 0,
           "atr": 0
         }
       },
-      "iv_rank": 53.7,
+      "iv_rank": 66.2,
       "gex": null,
       "ev": {
-        "ev_dollar": 114.77,
-        "ev_ratio": 0.3478,
-        "prob_profit": 0.677,
-        "prob_max": 0.169,
+        "ev_dollar": 204.84,
+        "ev_ratio": 0.4036,
+        "prob_profit": 0.717,
+        "prob_max": 0.179,
         "risk_reward": 1.33,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.64,
-        "avg_loss": 1.98
+        "avg_win": 4.06,
+        "avg_loss": 3.05
       },
       "vol_regime": {
-        "level": "HIGH",
+        "level": "MODERATE",
         "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
       },
       "flow_summary": {
         "strength": 7,
-        "cp_ratio": 2.31,
-        "total_premium": 1769304.0,
-        "opening_pct": 64.1
+        "cp_ratio": 2.59,
+        "total_premium": 498648.0,
+        "opening_pct": 18.9
       },
       "entry_price": 0,
       "max_hold_days": 30
     },
     {
-      "symbol": "UPST",
-      "direction": "BULLISH",
+      "symbol": "MRK",
+      "direction": "PUT",
       "conviction": "HIGH",
-      "composite": 91,
+      "composite": 89.4,
       "strategy": {
         "type": "NAKED_LONG",
-        "score": 45,
-        "direction": "BULLISH",
+        "score": 98,
+        "direction": "PUT",
         "contracts": [
           {
-            "symbol": "UPST  260417P00025000",
-            "desc": "UPST 04/17/2026 25.00 P",
-            "strike": 25.0,
-            "dte": 15,
-            "delta": 0.433,
-            "iv": 76.9,
-            "bid": 1.4,
-            "ask": 1.48,
-            "mid": 1.44,
-            "spread_pct": 0.0556,
-            "qty": 2,
-            "total_cost": 288.0,
-            "oi": 1337,
-            "volume": 66,
+            "symbol": "MRK   260515P00120000",
+            "desc": "MRK 05/15/2026 120.00 P",
+            "strike": 120.0,
+            "dte": 30,
+            "delta": 0.557,
+            "iv": 32.0,
+            "bid": 5.0,
+            "ask": 5.2,
+            "mid": 5.1,
+            "spread_pct": 0.0392,
+            "qty": 1,
+            "total_cost": 510.0,
+            "oi": 1001,
+            "volume": 26,
             "leg": "LONG"
           }
         ],
-        "net_debit": 1.44,
-        "max_loss": 1.44,
+        "net_debit": 5.1,
+        "max_loss": 5.1,
         "max_profit": "unlimited",
-        "breakeven": 23.56,
-        "qty": 2,
-        "total_cost": 288.0,
-        "description": "Long 25.0 BULLISH"
+        "breakeven": 114.9,
+        "qty": 1,
+        "total_cost": 510.0,
+        "description": "Long 120.0 PUT"
       },
       "analysis": {
-        "symbol": "UPST",
-        "price": 0,
-        "composite": 91,
+        "symbol": "MRK",
+        "price": 118.1,
+        "composite": 89.4,
         "conviction": "HIGH",
-        "direction": "BULLISH",
+        "direction": "PUT",
         "size_pct": 0.05,
         "sub_scores": {
-          "flow": 78,
-          "tech_bonus": 2,
-          "tech_penalty": 0
+          "trend": 90,
+          "pullback": 75,
+          "volume": 40,
+          "flow": 95,
+          "rel_strength": 60,
+          "rr": 90
         },
         "levels": {
-          "rsi": 2.3288860819452144,
-          "support": 0,
-          "resistance": 0,
-          "atr": 0
-        }
+          "support": 116.6,
+          "resistance": 125.14,
+          "high_52w": 125.14,
+          "atr": 2.75,
+          "rr_ratio": 4.68,
+          "pullback_pct": 0.0291,
+          "rsi": 53.2
+        },
+        "regime": "TRENDING_DOWN",
+        "vix": 18.17
       },
-      "iv_rank": 90,
-      "gex": null,
+      "iv_rank": 13.6,
+      "gex": {
+        "net_gex": 32.36,
+        "regime": "POSITIVE",
+        "max_gex_strike": 115.0,
+        "max_gex_value": 13.69,
+        "flip_strike": 119.0,
+        "call_wall": 120.0,
+        "put_wall": 110.0,
+        "suggested_target": 115.0,
+        "key_levels": [
+          {
+            "strike": 115.0,
+            "gex": 13.69
+          },
+          {
+            "strike": 120.0,
+            "gex": 7.07
+          },
+          {
+            "strike": 122.0,
+            "gex": 3.54
+          },
+          {
+            "strike": 130.0,
+            "gex": 2.99
+          },
+          {
+            "strike": 125.0,
+            "gex": 2.5
+          }
+        ]
+      },
       "ev": {
-        "ev_dollar": 107.8,
-        "ev_ratio": 0.3743,
-        "prob_profit": 0.613,
-        "prob_max": 0.153,
-        "risk_reward": 2.3,
+        "ev_dollar": 191.66,
+        "ev_ratio": 0.3758,
+        "prob_profit": 0.697,
+        "prob_max": 0.174,
+        "risk_reward": 1.33,
         "kelly_fraction": 0.1,
         "grade": "A",
         "is_positive": true,
-        "avg_win": 2.3,
-        "avg_loss": 0.86
+        "avg_win": 4.08,
+        "avg_loss": 3.06
       },
       "vol_regime": {
-        "level": "HIGH",
+        "level": "MODERATE",
         "trend": "FALLING",
-        "signal": "FEAR_RECEDING",
-        "strategy_bias": "DEBIT_SPREAD",
-        "size_modifier": 0.9,
-        "current_vix": 24.54
+        "signal": "NORMALIZING",
+        "strategy_bias": "NAKED_LONG",
+        "size_modifier": 1.05,
+        "current_vix": 18.17
       },
       "flow_summary": {
-        "strength": 6,
-        "cp_ratio": 3.38,
-        "total_premium": 148553.0,
-        "opening_pct": 39.2
+        "strength": 5,
+        "cp_ratio": 0.6,
+        "total_premium": 90321.0,
+        "opening_pct": 54.5
       },
-      "entry_price": 0,
+      "entry_price": 118.1,
       "max_hold_days": 30
     }
   ]

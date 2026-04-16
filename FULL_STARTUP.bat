@@ -1,23 +1,33 @@
 @echo off
 echo ============================================================
-echo FULL SYSTEM STARTUP - ALL TRADING SYSTEMS
+echo PAPER-ONLY STARTUP - SCALPER + DASHBOARD
+echo ============================================================
+echo.
+echo LIVE ACCOUNTS DISABLED:
+echo   - Elite v7 (brokerage)  OFF
+echo   - LETF Roth             OFF
+echo.
+echo RUNNING:
+echo   - 0DTE Scalper (paper)
+echo   - Dashboard
 echo ============================================================
 cd /d C:\Users\User\Desktop\trading_system
 docker start timescaledb 2>nul
 
-echo Starting Elite v7 (Brokerage)...
-start "Elite_v7" cmd /k "cd /d C:\Users\User\Desktop\trading_system && call venv\Scripts\activate && python scripts/aggressive_live.py --live"
-
-timeout /t 5 /nobreak >nul
-
-echo Starting LETF Roth...
-start "LETF_Roth" cmd /k "cd /d C:\Users\User\Desktop\trading_system && call venv\Scripts\activate && python scripts/letf_roth_live.py --live"
-
-timeout /t 5 /nobreak >nul
-
 echo Starting 0DTE Scalper (paper)...
 start "Scalper" cmd /k "cd /d C:\Users\User\Desktop\trading_system && call venv\Scripts\activate && python scripts/scalper_live.py"
 
+timeout /t 3 /nobreak >nul
+
+echo Starting Scalper Dashboard...
+start "Dashboard" cmd /k "cd /d C:\Users\User\Desktop\trading_system && call venv\Scripts\activate && python scripts/start_dashboard.py"
+
+timeout /t 3 /nobreak >nul
+
+echo Opening dashboard in browser...
+start http://localhost:8888
+
 echo ============================================================
-echo All systems launched in separate windows.
+echo Paper systems launched.
+echo Dashboard: http://localhost:8888
 echo ============================================================

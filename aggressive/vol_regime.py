@@ -85,15 +85,15 @@ class VolRegime:
         # Combined signal
         if level == "HIGH" and trend == "RISING":
             signal = "FEAR_INCREASING"
-            strategy_bias = "CREDIT_SPREAD"  # Sell rich premium
+            strategy_bias = "NAKED_LONG"  # Cash account: buy puts on weakness
             size_mod = 0.70
         elif level == "HIGH" and trend == "FALLING":
             signal = "FEAR_RECEDING"
-            strategy_bias = "DEBIT_SPREAD"  # IV still high but falling
+            strategy_bias = "NAKED_LONG"  # Cash account: buy calls on recovery
             size_mod = 0.90
         elif level == "EXTREME":
             signal = "PANIC"
-            strategy_bias = "CREDIT_SPREAD"  # Premium extremely rich
+            strategy_bias = "NAKED_LONG"  # Cash account: buy puts, reduce size
             size_mod = 0.50
         elif level == "LOW" and trend == "STABLE":
             signal = "COMPLACENT"
@@ -101,7 +101,7 @@ class VolRegime:
             size_mod = 1.15
         elif level == "MODERATE" and trend == "FALLING":
             signal = "NORMALIZING"
-            strategy_bias = "DEBIT_SPREAD"
+            strategy_bias = "NAKED_LONG"
             size_mod = 1.05
         else:
             signal = "NEUTRAL"

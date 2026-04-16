@@ -17,6 +17,11 @@ from letf.sector_analyzer import SectorAnalyzer
 from letf.executor import LETFExecutor
 
 setup_logging()
+logger.warning("=" * 60)
+logger.warning("LETF EVENING SCAN — DISABLED (LETF systems paused)")
+logger.warning("Re-enable manually before running.")
+logger.warning("=" * 60)
+import sys; sys.exit(0)
 client = get_schwab_client()
 logger.info("LETF Evening Scan")
 

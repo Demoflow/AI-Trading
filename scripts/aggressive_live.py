@@ -137,14 +137,42 @@ def run_fresh_scan(client, equity):
 def run(paper=True):
     from utils.logging_setup import setup_logging
     setup_logging()
+    logger.warning("=" * 60)
+    logger.warning("ELITE V.7 (AGGRESSIVE) SYSTEM — DISABLED")
+    logger.warning("Re-enable manually before running.")
+    logger.warning("=" * 60)
+    return
+
+    # ── CASH ACCOUNT / CONVERSION HALT CHECK ──
+    try:
+        import json as _jcfg
+        _elite_cfg = {}
+        if os.path.exists("config/elite_config.json"):
+            with open("config/elite_config.json") as _f:
+                _elite_cfg = _jcfg.load(_f)
+        if _elite_cfg.get("account_converting", False):
+            logger.warning("=" * 60)
+            logger.warning("ELITE SYSTEM HALTED — account converting to cash")
+            logger.warning("No new opening trades will be placed.")
+            logger.warning("Set account_converting=false in config/elite_config.json")
+            logger.warning("once conversion is confirmed complete.")
+            logger.warning("=" * 60)
+            # Still run exit monitoring for any open positions
+            _entries_halted = True
+        else:
+            _entries_halted = False
+    except Exception:
+        _entries_halted = False
 
     try:
         from data.broker.schwab_auth import get_schwab_client
         client = get_schwab_client()
         logger.info("Schwab connected")
+
     except Exception as e:
         logger.error(f"Schwab required: {e}")
         return
+
 
     ah = os.getenv("SCHWAB_ACCOUNT_HASH", "")
     eq = float(os.getenv("ACCOUNT_EQUITY", "8000"))
@@ -214,9 +242,8 @@ def run(paper=True):
     if not paper:
         try:
             _pdt_summ = executor.get_live_summary()
-            # Check if there's a day trade equity call or restriction
-            # Schwab doesn't expose day_trades_left directly
-            # We detect PDT by checking if equity < $25K on a margin account
+            # Cash account: PDT rules do not apply (cash accounts are exempt).
+            # This check is retained as an informational warning only.
             if _pdt_summ:
                 _eq = _pdt_summ.get("equity", 0)
                 if _eq < 25000 and _eq > 0:
@@ -252,6 +279,11 @@ def run(paper=True):
         return
 
     executed = set()
+    # Track sell orders already submitted — prevents duplicate orders when
+    # Schwab has a working sell and we try to submit another one (causes
+    # "not enough buying power" rejection for STC orders).
+    # Maps underlying symbol -> datetime of last submission.
+    _sell_submitted: dict = {}
     # Track entry dates for live positions (for max_hold_days)
     _entry_dates = {}
     _peak_pnl = {}  # Track peak P&L % per symbol for trailing stops
@@ -322,7 +354,7 @@ def run(paper=True):
         hour = now.hour + now.minute / 60.0
 
         # ── ENTRIES (10:00 - 14:30) ──
-        if 10.0 <= hour <= 14.5:
+        if not _entries_halted and 10.0 <= hour <= 14.5:
             for trade in trades:
                 sym = trade["symbol"]
                 if sym in executed:
@@ -336,24 +368,67 @@ def run(paper=True):
                 csym = contracts[0].get("symbol", "")
                 direction = trade["direction"]
 
-                # Check cash before entry
+                # ── IV FRESHNESS CHECK ──
+                # Re-fetch current IV at entry time and compare to scan-time IV.
+                # If IV has risen >20 pts since the overnight scan, the premium is
+                # significantly more expensive than the EV calculation assumed — skip.
+                # If IV rose 10-20 pts, log a caution but still execute.
+                if not paper and csym:
+                    try:
+                        _scan_iv = contracts[0].get("iv", 0)
+                        if _scan_iv > 0:
+                            _iv_resp = client.get_quote(csym)
+                            if _iv_resp and _iv_resp.status_code == 200:
+                                _iv_data = _iv_resp.json().get(csym, {})
+                                # Schwab returns volatility as a decimal fraction (0.42 = 42%)
+                                # in the reference section; fall back to quote section
+                                _raw_iv = _iv_data.get("reference", {}).get("volatility", 0)
+                                if _raw_iv == 0:
+                                    _raw_iv = _iv_data.get("quote", {}).get("volatility", 0)
+                                # Normalise: if value looks like a decimal (< 2.0), convert to %
+                                _current_iv = _raw_iv * 100 if _raw_iv < 2.0 else _raw_iv
+                                if _current_iv > 0:
+                                    _iv_rise = _current_iv - _scan_iv
+                                    if _iv_rise > 20:
+                                        logger.warning(
+                                            f"IV SPIKE SKIP: {sym} IV rose +{_iv_rise:.1f}pts "
+                                            f"since scan ({_scan_iv:.1f}% → {_current_iv:.1f}%) — "
+                                            f"premium too expensive vs EV calculation"
+                                        )
+                                        trade["_rejected"] = True
+                                        continue
+                                    elif _iv_rise > 10:
+                                        logger.warning(
+                                            f"IV ELEVATED: {sym} IV up +{_iv_rise:.1f}pts "
+                                            f"({_scan_iv:.1f}% → {_current_iv:.1f}%) — "
+                                            f"proceeding but premium is richer than expected"
+                                        )
+                    except Exception as _iv_err:
+                        logger.debug(f"IV freshness check skipped for {sym}: {_iv_err}")
+
+                # Check settled cash before entry — cash account: use settled_cash
+                # (get_live_summary already applies API-lag fallback when unsettled=0).
                 try:
                     if not paper:
                         _summ = executor.get_live_summary()
                         if _summ:
-                            # Use settled cash only (cash account rules)
                             _settled = _summ.get("settled_cash", _summ.get("cash", 0))
                             _cost = trade.get("strategy", {}).get("total_cost", 500)
-                            _buffer = 500  # Keep $500 safety buffer
+                            _buffer = 300
                             if _cost > (_settled - _buffer):
-                                logger.warning(f"SKIP {sym}: cost ${_cost:.0f} > settled cash ${_settled:.0f} (buffer ${_buffer})")
+                                logger.warning(f"SKIP {sym}: cost ${_cost:.0f} > settled cash ${_settled:.0f} — waiting for settlement")
                                 trade["_rejected"] = True
                                 continue
                 except Exception:
                     pass
 
-                # MAX POSITION SIZE CHECK
-                MAX_POSITION_PCT = 0.10
+                # MAX POSITION SIZE CHECK — read from elite_config
+                try:
+                    import json as _jpos
+                    with open("config/elite_config.json") as _fpos:
+                        MAX_POSITION_PCT = _jpos.load(_fpos).get("max_position_pct", 0.12)
+                except Exception:
+                    MAX_POSITION_PCT = 0.12
                 _trade_cost = trade.get("strategy", {}).get("total_cost", 500)
                 _equity = executor.get_live_summary().get("equity", 7500) if not paper else 7500
                 try:
@@ -374,14 +449,28 @@ def run(paper=True):
                 if trade.get("_rejected"):
                     continue
                 if should_buy:
-                    # Check real cash before ordering
+                    # Final cash check against Schwab — cash account: use only
+                    # availableFundsNonMarginableTrade (settled funds). Do NOT
+                    # fall back to cashBalance — that includes unsettled proceeds
+                    # which would cause a Good Faith Violation in a cash account.
                     try:
-                        ah0 = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == os.getenv("SCHWAB_ACCOUNT_NUMBER", "28135437"))  # Brokerage account
+                        ah0 = next(a["hashValue"] for a in client.get_account_numbers().json() if a["accountNumber"] == os.getenv("SCHWAB_ACCOUNT_NUMBER", "28135437"))
                         r1 = client.get_account(ah0)
-                        real_cash = r1.json().get("securitiesAccount",{}).get("currentBalances",{}).get("availableFundsNonMarginableTrade",0)
-                        trade_cost = trade.get("strategy",{}).get("total_cost",2000)
+                        _bal = r1.json().get("securitiesAccount", {}).get("currentBalances", {})
+                        real_cash = _bal.get("availableFundsNonMarginableTrade", 0)
+                        _cash_bal = _bal.get("cashBalance", 0)
+                        _unsettled = _bal.get("unsettledCash", 0)
+                        # Cash account API lag: if available=0 but cashBalance>0 and no
+                        # unsettled proceeds (= no GFV risk), treat cashBalance as available.
+                        if real_cash == 0 and _cash_bal > 0 and _unsettled == 0:
+                            real_cash = _cash_bal
+                            logger.info(
+                                f"CASH FALLBACK: availableFundsNonMarginableTrade=0, "
+                                f"using cashBalance=${_cash_bal:,.2f} (no unsettled proceeds)"
+                            )
+                        trade_cost = trade.get("strategy", {}).get("total_cost", 2000)
                         if trade_cost > real_cash:
-                            logger.warning(f"SKIP {sym}: cost ${trade_cost:,.0f}  ${real_cash:,.0f}")
+                            logger.warning(f"SKIP {sym}: cost ${trade_cost:,.0f} > settled available ${real_cash:,.0f}")
                             trade["_rejected"] = True
                             continue
                     except Exception as e:
@@ -673,8 +762,16 @@ def run(paper=True):
                                     continue
                                 else:
                                     logger.warning(f"DAY TRADE OVERRIDE: {sym} stop loss triggered - selling anyway")
+                            # Skip if a sell order was already submitted recently
+                            import datetime as _dtchk
+                            _last_sell = _sell_submitted.get(sym)
+                            if _last_sell and (_dtchk.datetime.now() - _last_sell).total_seconds() < 600:
+                                logger.info(f"SELL COOLDOWN: {sym} order already submitted {int((_dtchk.datetime.now()-_last_sell).total_seconds())}s ago - skipping")
+                                continue
                             result = executor.close_position_live(pos_for_exit)
                             logger.info(f"LIVE EXIT: {sym} {reason} -> {result.get('status')}")
+                            if result.get("status") in ("SUBMITTED", "FILLED"):
+                                _sell_submitted[sym] = _dtchk.datetime.now()
 
                     # Also check Greeks for naked longs still holding
                     if not should_exit and pos_for_exit.get("strategy_type","") == "NAKED_LONG":
@@ -777,13 +874,28 @@ def run(paper=True):
                                             logger.warning(f"DAY TRADE BLOCKED: {ar['symbol']} entered today - cannot sell same day")
                                             continue
 
+                                        # Skip if a sell order was already submitted recently
+                                        import datetime as _dtchk2
+                                        _last_sell2 = _sell_submitted.get(lp["underlying"])
+                                        if _last_sell2 and (_dtchk2.datetime.now() - _last_sell2).total_seconds() < 600:
+                                            logger.info(f"ANALYST SELL COOLDOWN: {ar['symbol']} order already submitted {int((_dtchk2.datetime.now()-_last_sell2).total_seconds())}s ago - skipping")
+                                            break
                                         pos_for_close = {
                                             "underlying": lp["underlying"],
                                             "strategy_type": "NAKED_LONG",
                                             "legs": [{"symbol": lp["symbol"], "leg": "LONG", "qty": abs(lp["qty"])}],
                                         }
-                                        result = executor.close_position_live(pos_for_close)
-                                        logger.info(f"ANALYST SOLD: {ar['symbol']} -> {result.get('status')}")
+                                        # urgent=True: analyst has flagged this position
+                                        # for multiple consecutive runs — use market order
+                                        # to guarantee execution, not a limit that can be
+                                        # rejected if the bid moves before submission.
+                                        result = executor.close_position_live(pos_for_close, urgent=True)
+                                        status = result.get("status")
+                                        if status in ("SUBMITTED", "FILLED"):
+                                            logger.info(f"ANALYST SELL SUBMITTED: {ar['symbol']} ({lp['symbol']})")
+                                            _sell_submitted[lp["underlying"]] = _dtchk2.datetime.now()
+                                        else:
+                                            logger.error(f"ANALYST SELL FAILED: {ar['symbol']} status={status} reason={result.get('reason','')}")
                                         break
             except Exception as e:
                 logger.warning(f"Portfolio analyst error: {e}")

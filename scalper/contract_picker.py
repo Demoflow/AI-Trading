@@ -137,8 +137,8 @@ class ContractPicker:
             }
         return None
 
-    def pick(self, symbol, direction, max_cost, structure="LONG_OPTION"):
-        preferred_dte = self._smart_dte(structure)
+    def pick(self, symbol, direction, max_cost, structure="LONG_OPTION", confidence=70):
+        preferred_dte = self._smart_dte(structure, confidence)
         chain, price = self._get_chain(symbol, direction, 10)
         if not chain or price <= 0:
             return None

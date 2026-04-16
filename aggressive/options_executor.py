@@ -116,6 +116,9 @@ class OptionsExecutor:
             if not os.path.exists(dst):
                 shutil.copy2(src, dst)
 
+    # Cash account: only NAKED_LONG is permitted.
+    CASH_ALLOWED_STRATEGIES = {"NAKED_LONG"}
+
     def execute_strategy(self, trade):
         """Execute any strategy type from the scanner output."""
         strategy = trade.get("strategy", {})
@@ -123,14 +126,18 @@ class OptionsExecutor:
         sym = trade["symbol"]
         direction = trade["direction"]
 
+        # Hard guard: reject any strategy not allowed for a cash account.
+        # This is defence-in-depth — strategy_engine.BLOCKED_STRATEGIES
+        # should already prevent these from reaching here.
+        if stype not in self.CASH_ALLOWED_STRATEGIES:
+            logger.error(
+                f"BLOCKED: {sym} strategy={stype} not allowed on cash account. "
+                f"Only {self.CASH_ALLOWED_STRATEGIES} permitted."
+            )
+            return {"status": "REJECTED", "reason": f"cash_account_blocked_{stype}"}
+
         if stype == "NAKED_LONG":
             return self._execute_naked(trade)
-        elif stype == "DEBIT_SPREAD":
-            return self._execute_debit_spread(trade)
-        elif stype == "CREDIT_SPREAD":
-            return self._execute_credit_spread(trade)
-        elif stype == "CALENDAR_SPREAD":
-            return self._execute_calendar(trade)
         else:
             logger.warning(f"Unknown strategy: {stype}")
             return {"status": "REJECTED", "reason": "unknown_strategy"}
@@ -379,15 +386,11 @@ class OptionsExecutor:
 
     def _paper_open(self, trade, stype, cost, legs, credit=0):
         """Open a paper position for any strategy type."""
-        if cost > self.paper_positions["cash"] and stype != "CREDIT_SPREAD":
+        # Cash account: all strategies require settled cash up front.
+        if cost > self.paper_positions["cash"]:
             return {"status": "REJECTED", "reason": "insufficient_cash"}
 
-        if stype == "CREDIT_SPREAD":
-            # Credit spreads: deduct collateral, add credit
-            self.paper_positions["cash"] -= cost
-            self.paper_positions["cash"] += credit
-        else:
-            self.paper_positions["cash"] -= cost
+        self.paper_positions["cash"] -= cost
 
         s = trade.get("strategy", {})
         pos = {
@@ -458,11 +461,17 @@ class OptionsExecutor:
         )
         return {"status": "FILLED", "pnl": pnl}
 
-    def close_position_live(self, pos):
-        """Close a live position on Schwab."""
+    def close_position_live(self, pos, urgent=False):
+        """
+        Close a live position on Schwab.
+
+        urgent=True  — use a market order (analyst-driven exits, wide-spread options).
+                       Guarantees execution; acceptable slippage on a position being shed.
+        urgent=False — use a limit order at bid (normal exit-rule closes).
+        """
         stype = pos.get("strategy_type", "NAKED_LONG")
         legs = pos.get("legs", [])
-        ah = self._get_account_hash()  # FIXED: dynamic hash
+        ah = self._get_account_hash()
 
         if stype == "NAKED_LONG":
             if not legs:
@@ -472,22 +481,34 @@ class OptionsExecutor:
             qty = leg.get("qty", 1)
             try:
                 from schwab.orders.options import option_sell_to_close_limit, option_sell_to_close_market
-                # Use limit order at bid price (avoid market order slippage)
-                try:
-                    _q = self.client.get_quote(csym)
-                    _bid = _q.json().get(csym, {}).get("quote", {}).get("bidPrice", 0) if _q.status_code == 200 else 0
-                    if _bid > 0.05:
-                        order = option_sell_to_close_limit(csym, qty, str(round(_bid * 0.98, 2)))
-                        logger.info(f"LIMIT SELL: {csym} x{qty} @ ${_bid * 0.98:.2f} (bid=${_bid:.2f})")
-                    else:
-                        order = option_sell_to_close_market(csym, qty)
-                except Exception:
+                if urgent:
+                    # Market order — execution certainty over price
                     order = option_sell_to_close_market(csym, qty)
+                    logger.info(f"MARKET SELL (urgent): {csym} x{qty}")
+                else:
+                    # Limit at bid — avoids market order slippage for normal exits
+                    try:
+                        _q = self.client.get_quote(csym)
+                        _bid = _q.json().get(csym, {}).get("quote", {}).get("bidPrice", 0) if _q.status_code == 200 else 0
+                        if _bid > 0.05:
+                            order = option_sell_to_close_limit(csym, qty, str(round(_bid, 2)))
+                            logger.info(f"LIMIT SELL: {csym} x{qty} @ ${_bid:.2f} (at bid)")
+                        else:
+                            order = option_sell_to_close_market(csym, qty)
+                    except Exception:
+                        order = option_sell_to_close_market(csym, qty)
                 resp = self.client.place_order(ah, order)
                 if resp.status_code in (httpx.codes.CREATED, httpx.codes.OK):
-                    logger.info(f"LIVE CLOSE: {pos.get('underlying','?')} {csym} x{qty}")
-                    return {"status": "FILLED"}
-                return {"status": "REJECTED", "code": resp.status_code}
+                    logger.info(f"LIVE CLOSE SUBMITTED: {pos.get('underlying','?')} {csym} x{qty}")
+                    return {"status": "SUBMITTED"}
+                # Log the rejection body when available
+                try:
+                    rej_body = resp.json()
+                    rej_reason = str(rej_body)[:200]
+                except Exception:
+                    rej_reason = f"HTTP {resp.status_code}"
+                logger.error(f"SELL REJECTED: {csym} status={resp.status_code} reason={rej_reason}")
+                return {"status": "REJECTED", "code": resp.status_code, "reason": rej_reason}
             except Exception as e:
                 logger.error(f"Live close error: {e}")
                 return {"status": "ERROR", "reason": str(e)}
@@ -642,10 +663,25 @@ class OptionsExecutor:
             self._api_fail_count = 0
             self._api_backoff_until = None
             option_positions = [p for p in positions if p.get("instrument", {}).get("assetType") == "OPTION"]
+            cash_balance = bal.get("cashBalance", 0)
+            unsettled = bal.get("unsettledCash", 0)
+            available = bal.get("availableFundsNonMarginableTrade", 0)
+            # Cash account API lag fix: Schwab sometimes reports availableFundsNonMarginableTrade=0
+            # immediately after account type conversion despite cash being present.
+            # Safe fallback: if available=0 but cashBalance>0 and unsettledCash=0,
+            # use cashBalance (zero unsettled = zero GFV risk from recent sales).
+            if available == 0 and cash_balance > 0 and unsettled == 0:
+                settled_cash = cash_balance
+                logger.info(
+                    f"SETTLEMENT LAG: availableFundsNonMarginableTrade=0, "
+                    f"using cashBalance=${cash_balance:,.2f} (unsettledCash=0, no GFV risk)"
+                )
+            else:
+                settled_cash = available if available > 0 else max(0, cash_balance - unsettled)
             return {
-                "cash": bal.get("cashBalance", 0),
-                "settled_cash": bal.get("cashBalance", 0) - bal.get("unsettledCash", 0),
-                "unsettled": bal.get("unsettledCash", 0),
+                "cash": cash_balance,
+                "settled_cash": settled_cash,
+                "unsettled": unsettled,
                 "equity": bal.get("liquidationValue", 0),
                 "open_positions": len(option_positions),
                 "total_pnl": sum(p.get("currentDayProfitLoss", 0) for p in option_positions),

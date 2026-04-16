@@ -84,6 +84,11 @@ class CandleBuilder:
             result.append(self._current)
         return result
 
+    def seed_candles(self, candles):
+        """Pre-populate with historical OHLCV candles so indicators have data immediately."""
+        for c in candles:
+            self.candles.append(c)
+
 
 class Indicators:
 
@@ -190,6 +195,38 @@ class Indicators:
         return round(mid+mult*sd, 4), round(mid, 4), round(mid-mult*sd, 4)
 
     @staticmethod
+    def donchian(highs, lows, period=20):
+        """Donchian Channel: N-bar highest high / lowest low / midpoint."""
+        if len(highs) < period or len(lows) < period:
+            return None, None, None
+        dc_high = max(highs[-period:])
+        dc_low  = min(lows[-period:])
+        dc_mid  = round((dc_high + dc_low) / 2, 4)
+        return round(dc_high, 4), round(dc_low, 4), dc_mid
+
+    @staticmethod
+    def ema_slope(closes, period=9, lookback=3):
+        """Returns 'UP', 'DOWN', or 'FLAT' based on EMA direction over last N bars."""
+        if len(closes) < period + lookback:
+            return "FLAT"
+        arr = np.array(closes, dtype=float)
+        m = 2 / (period + 1)
+        v = arr[0]
+        ema_vals = []
+        for i in range(1, len(arr)):
+            v = (arr[i] - v) * m + v
+            if i >= len(arr) - lookback - 1:
+                ema_vals.append(v)
+        if len(ema_vals) < 2:
+            return "FLAT"
+        delta = ema_vals[-1] - ema_vals[0]
+        if delta > 0.005:
+            return "UP"
+        if delta < -0.005:
+            return "DOWN"
+        return "FLAT"
+
+    @staticmethod
     def volume_profile(candles, bins=20):
         if not candles or len(candles) < 5:
             return [], None, None
@@ -223,16 +260,82 @@ class RealtimeDataEngine:
     def __init__(self, schwab_client):
         self.client = schwab_client
         # Dual timeframe builders
-        self.builders_5m = {"SPY": CandleBuilder(5), "QQQ": CandleBuilder(5), "AAPL": CandleBuilder(5), "MSFT": CandleBuilder(5), "NVDA": CandleBuilder(5), "TSLA": CandleBuilder(5), "AMZN": CandleBuilder(5), "META": CandleBuilder(5), "GOOGL": CandleBuilder(5), "AMD": CandleBuilder(5), "NFLX": CandleBuilder(5), "COIN": CandleBuilder(5), "BA": CandleBuilder(5), "JPM": CandleBuilder(5), "XOM": CandleBuilder(5)}
-        self.builders_1m = {"SPY": CandleBuilder(1), "QQQ": CandleBuilder(1), "AAPL": CandleBuilder(1), "MSFT": CandleBuilder(1), "NVDA": CandleBuilder(1), "TSLA": CandleBuilder(1), "AMZN": CandleBuilder(1), "META": CandleBuilder(1), "GOOGL": CandleBuilder(1), "AMD": CandleBuilder(1), "NFLX": CandleBuilder(1), "COIN": CandleBuilder(1), "BA": CandleBuilder(1), "JPM": CandleBuilder(1), "XOM": CandleBuilder(1)}
+        _SYMS = [
+            "SPY", "QQQ", "IWM",
+            "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
+            "TSLA", "AMD", "NFLX", "PLTR", "MSTR",
+            "SMH",
+            "COIN", "JPM", "XOM",
+        ]
+        self.builders_5m = {s: CandleBuilder(5) for s in _SYMS}
+        self.builders_1m = {s: CandleBuilder(1) for s in _SYMS}
         # Keep old reference for compatibility
         self.builders = self.builders_5m
         self.indicators = Indicators()
-        self._session_candles = {"SPY": [], "QQQ": [], "AAPL": [], "MSFT": [], "NVDA": [], "TSLA": [], "AMZN": [], "META": [], "GOOGL": [], "AMD": [], "NFLX": [], "COIN": [], "BA": [], "JPM": [], "XOM": []}
+        self._session_candles = {s: [] for s in _SYMS}
+
+    def seed_history(self):
+        """
+        Pre-populate candle builders with today's historical data from Schwab so
+        RSI/EMA/MACD indicators are valid from the first poll cycle instead of
+        returning defaults for the first 75–175 minutes of the session.
+        Seeds 5m builders with up to 60 candles and 1m builders with up to 60 candles.
+        """
+        import httpx
+        from datetime import datetime, timedelta
+
+        def _parse_candles(resp_json):
+            raw = resp_json.get("candles", [])
+            result = []
+            for c in raw:
+                try:
+                    ts_ms = c.get("datetime", 0)
+                    dt = datetime.fromtimestamp(ts_ms / 1000) if ts_ms else datetime.now()
+                    result.append({
+                        "time": dt,
+                        "open": float(c["open"]),
+                        "high": float(c["high"]),
+                        "low": float(c["low"]),
+                        "close": float(c["close"]),
+                        "volume": int(c.get("volume", 0)),
+                    })
+                except Exception:
+                    continue
+            return result
+
+        seeded_5m = 0
+        seeded_1m = 0
+        for sym in list(self.builders_5m.keys()):
+            try:
+                time.sleep(0.1)
+                r5 = self.client.get_price_history_every_five_minutes(sym)
+                if r5.status_code == httpx.codes.OK:
+                    candles_5m = _parse_candles(r5.json())
+                    if candles_5m:
+                        # Drop the last (still-forming) candle; keep up to 60
+                        self.builders_5m[sym].seed_candles(candles_5m[:-1][-60:])
+                        seeded_5m += 1
+            except Exception as e:
+                logger.debug(f"seed_history 5m {sym}: {e}")
+
+            try:
+                time.sleep(0.1)
+                r1 = self.client.get_price_history_every_minute(sym)
+                if r1.status_code == httpx.codes.OK:
+                    candles_1m = _parse_candles(r1.json())
+                    if candles_1m:
+                        self.builders_1m[sym].seed_candles(candles_1m[:-1][-60:])
+                        seeded_1m += 1
+            except Exception as e:
+                logger.debug(f"seed_history 1m {sym}: {e}")
+
+        logger.info(
+            f"History seeded: {seeded_5m} symbols (5m), {seeded_1m} symbols (1m)"
+        )
 
     def poll(self):
         results = {}
-        for sym in ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META', 'GOOGL', 'AMD', 'NFLX', 'COIN', 'BA', 'JPM', 'XOM']:
+        for sym in self.builders_5m:
             try:
                 time.sleep(0.08)
                 resp = self.client.get_quote(sym)
@@ -282,14 +385,17 @@ class RealtimeDataEngine:
             return None
 
         price = closes[-1]
-        ema9 = self.indicators.ema(closes, 9)
+        ema9  = self.indicators.ema(closes, 9)
         ema21 = self.indicators.ema(closes, 21)
+        ema50 = self.indicators.ema(closes, 50)
 
-        prev9 = self.indicators.ema(closes[:-1], 9) if len(closes) >= 22 else ema9
+        prev9  = self.indicators.ema(closes[:-1], 9)  if len(closes) >= 22 else ema9
         prev21 = self.indicators.ema(closes[:-1], 21) if len(closes) >= 22 else ema21
 
         cross_up = (prev9 and prev21 and ema9 and ema21 and prev9 <= prev21 and ema9 > ema21)
         cross_dn = (prev9 and prev21 and ema9 and ema21 and prev9 >= prev21 and ema9 < ema21)
+
+        ema9_slope = self.indicators.ema_slope(closes, period=9, lookback=3)
 
         all_c = builder.get_all_candles()
         vwap, v1u, v1d, v2u, v2d = self.indicators.vwap_with_bands(all_c)
@@ -307,6 +413,13 @@ class RealtimeDataEngine:
         or_low = min(c["low"] for c in sc[:3]) if len(sc) >= 3 else (current["low"] if current else price)
 
         _, hvn, lvn = self.indicators.volume_profile(all_c)
+
+        # Donchian Channel: use all-but-current-candle highs/lows so price can "break" the channel
+        dc_highs = highs[:-1] if len(highs) > 1 else highs
+        dc_lows  = lows[:-1]  if len(lows) > 1  else lows
+        dc_h, dc_l, dc_m = self.indicators.donchian(dc_highs, dc_lows, 20)
+        dc_breakout_up   = bool(dc_h and price > dc_h)
+        dc_breakout_down = bool(dc_l and price < dc_l)
 
         trend = "NEUTRAL"
         if ema9 and ema21 and vwap:
@@ -336,9 +449,13 @@ class RealtimeDataEngine:
             "session_open": sc[0]["open"] if sc else price,
             "time": datetime.now(),
             "candle_count": builder.candle_count(),
-            "ema9": ema9, "ema21": ema21,
+            "ema9": ema9, "ema21": ema21, "ema50": ema50,
+            "ema9_slope": ema9_slope,
             "ema_cross_up": cross_up, "ema_cross_down": cross_dn,
             "ema_trend": "UP" if ema9 and ema21 and ema9 > ema21 else "DOWN",
+            "ema50_trend": ("UP" if ema50 and price > ema50 else "DOWN") if ema50 else "UNKNOWN",
+            "dc_high": dc_h, "dc_low": dc_l, "dc_mid": dc_m,
+            "dc_breakout_up": dc_breakout_up, "dc_breakout_down": dc_breakout_down,
             "vwap": vwap, "vwap_1sd_up": v1u, "vwap_1sd_dn": v1d,
             "vwap_2sd_up": v2u, "vwap_2sd_dn": v2d, "vwap_band": vwap_band,
             "price_vs_vwap": round(price - vwap, 4) if vwap else 0,

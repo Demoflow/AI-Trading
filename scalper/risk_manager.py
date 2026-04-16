@@ -1,9 +1,9 @@
 """
-Scalper Risk Manager v4 - Strategy-Specific Exits.
-- Naked/straddle/strangle have separate exit logic
-- Partial profit taking (scale out)
-- Proper premium selling exits (50% profit, 2x stop)
-- Close all selling positions by 3:30 PM ET
+Scalper Risk Manager v5 - Long Options Only.
+- Long calls and puts only (no premium selling)
+- Uncapped daily trades (settled cash is the natural limit)
+- 2% of equity per trade, confidence-scaled
+- Dynamic equity sync: position size grows as account grows
 - Time-of-day gamma-aware scaling for directional
 """
 
@@ -27,10 +27,27 @@ CPI_DATES = [
 class ScalperRiskManager:
 
     MAX_RISK_PER_TRADE = 0.02
-    MAX_TRADES_PER_DAY = 8
     MAX_DAILY_LOSS_PCT = 0.08
-    MAX_HOLD_MINUTES = 30
-    MAX_OPEN_POSITIONS = 3
+    MAX_HOLD_MINUTES = 30    # Default; _get_directional_targets() returns time-aware value
+    MAX_OPEN_POSITIONS = 5   # Default; overridden by day type + GEX via get_max_positions()
+
+    # Day-type / GEX aware position caps
+    _POS_CAP = {
+        ("QUIET",    "POSITIVE"): 2,
+        ("CHOPPY",   "POSITIVE"): 2,
+        ("QUIET",    "NEGATIVE"): 3,
+        ("QUIET",    "NEUTRAL"):  3,
+        ("CHOPPY",   "NEGATIVE"): 3,
+        ("CHOPPY",   "NEUTRAL"):  3,
+    }
+    # Default for TRENDING / VOLATILE (or any combo not listed above) = 5
+
+    # Minimum confidence overrides by day type
+    _MIN_CONF = {
+        "QUIET":   85,
+        "CHOPPY":  82,
+    }
+    MIN_CONF_DEFAULT = 70
 
     LUNCH_START = 10.5
     LUNCH_END = 13.0
@@ -48,6 +65,8 @@ class ScalperRiskManager:
         self.open_positions = 0
         self.shutdown = False
         self._trade_date = date.today()
+        self.day_type = ""       # Set by main loop after classification
+        self.gex_regime = ""     # Set by main loop after GEX update
 
     def _reset_if_new_day(self):
         if date.today() != self._trade_date:
@@ -80,15 +99,10 @@ class ScalperRiskManager:
             return False, "pre_market"
         if h >= self.POWER_HOUR_END:
             return False, "closed"
-        if self.LUNCH_START <= h < self.LUNCH_END:
-            return False, "lunch"
-        if self.MORNING_START <= h < self.MORNING_END:
-            return True, "morning"
-        if self.AFTERNOON_START <= h < self.AFTERNOON_END:
-            return True, "afternoon"
-        if self.POWER_HOUR_START <= h < self.POWER_HOUR_END:
-            return True, "power_hour"
-        return False, "between"
+        # Time-of-day window gating is handled by TimeContextFilter (time_context.py).
+        # risk_manager only enforces the outer session boundary; intra-session
+        # chop-zone confidence boosts and entry_allowed flags live in time_context.
+        return True, "active"
 
     def can_trade(self):
         self._reset_if_new_day()
@@ -98,14 +112,26 @@ class ScalperRiskManager:
             self.shutdown = True
             logger.warning(f"DAILY LOSS: ${self.daily_pnl:+,.2f}")
             return False, "max_loss"
-        if self.trades_today >= self.MAX_TRADES_PER_DAY:
-            return False, "max_trades"
-        if self.open_positions >= self.MAX_OPEN_POSITIONS:
-            return False, "max_open"
+        cap = self.get_max_positions(self.day_type, self.gex_regime)
+        if self.open_positions >= cap:
+            return False, f"max_open({cap})"
         ok, reason = self.is_trading_window()
         if not ok:
             return False, reason
         return True, "ok"
+
+    def update_equity(self, equity):
+        """Sync equity so position sizing scales with account growth."""
+        if equity > 0:
+            self.equity = equity
+
+    def get_max_positions(self, day_type="", gex_regime=""):
+        """Return position cap based on day classification and GEX regime."""
+        return self._POS_CAP.get((day_type, gex_regime), self.MAX_OPEN_POSITIONS)
+
+    def get_min_confidence(self, day_type=""):
+        """Return minimum signal confidence based on day classification."""
+        return self._MIN_CONF.get(day_type, self.MIN_CONF_DEFAULT)
 
     def get_position_size(self, conf):
         base = self.equity * self.MAX_RISK_PER_TRADE
@@ -123,191 +149,86 @@ class ScalperRiskManager:
 
     def check_exit(self, position, current_value):
         """
-        Route to strategy-specific exit logic.
+        Exit logic for long calls and puts.
         Returns (should_exit, reason, action)
         """
-        structure = position.get("structure", "LONG_OPTION")
-
-        if structure == "LONG_OPTION":
-            return self._exit_directional(position, current_value)
-        elif structure == "CREDIT_SPREAD":
-            return self._exit_credit(position, current_value)
-        elif structure in ("NAKED_PUT", "NAKED_CALL"):
-            return self._exit_naked(position, current_value)
-        elif structure in ("STRADDLE", "STRANGLE"):
-            return self._exit_straddle_strangle(position, current_value)
-        elif structure == "IRON_CONDOR":
-            return self._exit_credit(position, current_value)
-        elif structure == "RATIO_SPREAD":
-            return self._exit_ratio(position, current_value)
-        else:
-            return self._exit_directional(position, current_value)
+        return self._exit_directional(position, current_value)
 
     def _get_directional_targets(self):
-        """Gamma-aware targets for directional buys."""
+        """
+        Time-of-day aware targets for long options.
+        Returns: (profit_target, stop_loss, trail_start, trail_pct, breakeven_trigger, max_hold_min)
+
+        All windows target ~2.5:1 R:R (profit / stop).
+        Stops tighten as theta decay accelerates through the day.
+        """
         h = datetime.now().hour + datetime.now().minute / 60.0
-        if h < 10.0:
-            return 0.35, 0.30, -0.12
-        elif h < 13.0:
-            return 0.30, 0.25, -0.10
-        elif h < 14.5:
-            return 0.25, 0.20, -0.08
-        else:
-            return 0.20, 0.15, -0.08
+        #                    profit  stop  trail_start  trail_pct  be_trigger  max_hold
+        if h < 10.0:       # Opening — wider gamma range, 30 min hold OK
+            return          0.50,   0.20,   0.12,        0.10,      0.20,       30
+        elif h < 13.0:     # First pullback + chop zone
+            return          0.40,   0.15,   0.10,        0.08,      0.18,       25
+        elif h < 14.0:     # Post-lunch directional
+            return          0.30,   0.12,   0.08,        0.07,      0.15,       20
+        else:              # Gamma zone — theta accelerating, exit fast
+            return          0.25,   0.10,   0.07,        0.06,      0.12,       15
 
     def _exit_directional(self, pos, current_value):
-        """Exit logic for long options (calls/puts)."""
+        """
+        Exit logic for long options (calls/puts).
+
+        Priority order:
+          1. Full profit target
+          2. Hard stop loss
+          3. Breakeven stop — once peak exceeded be_trigger, never fall below +2%
+          4. Trailing stop — activates at trail_start gain, fires trail_pct below peak
+          5. Time stop — time-of-day aware max hold
+          6. Closing gate — exits before EOD force-close window
+        """
         entry_cost = pos.get("entry_cost", 0)
         entry_time = pos.get("entry_time")
         if entry_cost <= 0:
             return False, "no_data", None
 
         pnl_pct = (current_value - entry_cost) / entry_cost
-        profit_t, stop_t, trail_t = self._get_directional_targets()
+        profit_t, stop_t, trail_start, trail_pct, be_trigger, max_hold = (
+            self._get_directional_targets()
+        )
 
-        # Full profit target
+        # 1. Full profit target
         if pnl_pct >= profit_t:
             return True, f"profit_{pnl_pct:+.0%}", None
 
-        # Stop loss
+        # 2. Hard stop loss
         if pnl_pct <= -stop_t:
-            # Check if rolling is better
-            if self._should_roll(pos, pnl_pct):
-                return True, f"roll_{pnl_pct:+.0%}", "ROLL"
             return True, f"stop_{pnl_pct:+.0%}", None
 
-        # Time stop
-        if entry_time:
-            if isinstance(entry_time, str):
-                entry_time = datetime.fromisoformat(entry_time)
-            mins = (datetime.now() - entry_time).total_seconds() / 60
-            if mins >= self.MAX_HOLD_MINUTES:
-                return True, f"time_{mins:.0f}min", None
+        # 3. Breakeven stop: once the position peaked above be_trigger,
+        #    never let it fall back below +2% (protect meaningful gains)
+        peak = pos.get("peak_value", current_value)
+        if entry_cost > 0 and peak > 0:
+            peak_pct = (peak - entry_cost) / entry_cost
+            if peak_pct >= be_trigger and pnl_pct <= 0.02:
+                return True, f"breakeven_{pnl_pct:+.0%}", None
 
-        # Market closing
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.92:
-            return True, "closing", None
-
-        # Trailing stop after partial profit
-        if pnl_pct >= 0.15:
-            peak = pos.get("peak_value", current_value)
-            if peak > 0:
+            # 4. Trailing stop: activates at trail_start gain,
+            #    fires if position retreats trail_pct below its peak
+            if pnl_pct >= trail_start:
                 from_peak = (current_value - peak) / peak
-                if from_peak <= trail_t:
+                if from_peak <= -trail_pct:
                     return True, f"trail_{from_peak:+.0%}", None
 
-        return False, "hold", None
-
-    def _exit_credit(self, pos, current_value):
-        """
-        Exit for credit spreads and iron condors.
-        Profit: spread worth < 50% of credit (keep 50%+)
-        Stop: spread worth > 2x credit
-        Time: close by 3:30 PM ET (2:30 CT)
-        """
-        credit = pos.get("credit_received", 0)
-        if credit <= 0:
-            return self._exit_directional(pos, current_value)
-
-        if current_value <= credit * 0.50:
-            return True, "credit_profit_50%", None
-        if current_value >= credit * 2.0:
-            return True, "credit_stop_2x", None
-
-        # Close all premium sells by 3:30 PM ET
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.5:
-            return True, "credit_eod_close", None
-
-        return False, "hold", None
-
-    def _exit_naked(self, pos, current_value):
-        """
-        Exit for naked puts/calls.
-        Profit: option worth < 50% of premium collected
-        Stop: option worth > 2x premium
-        Time: close by 3:30 PM ET
-        """
-        credit = pos.get("credit_received", 0)
-        if credit <= 0:
-            return self._exit_directional(pos, current_value)
-
-        if current_value <= credit * 0.50:
-            return True, "naked_profit_50%", None
-        if current_value >= credit * 2.0:
-            return True, "naked_stop_2x", None
-
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.5:
-            return True, "naked_eod_close", None
-
-        return False, "hold", None
-
-    def _exit_straddle_strangle(self, pos, current_value):
-        """
-        Exit for short straddles/strangles.
-        Profit: total value < 50% of premium
-        Stop: total value > 2x premium
-        Time: close by 3:30 PM ET
-        One-sided risk: if value > 1.5x, alert
-        """
-        credit = pos.get("credit_received", 0)
-        if credit <= 0:
-            return self._exit_directional(pos, current_value)
-
-        if current_value <= credit * 0.50:
-            return True, "straddle_profit_50%", None
-        if current_value >= credit * 2.0:
-            return True, "straddle_stop_2x", None
-
-        # Earlier exit at 1.5x as warning
-        if current_value >= credit * 1.5:
-            h = datetime.now().hour + datetime.now().minute / 60.0
-            if h >= 14.0:
-                return True, "straddle_risk_1.5x_pm", None
-
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.5:
-            return True, "straddle_eod_close", None
-
-        return False, "hold", None
-
-    def _exit_ratio(self, pos, current_value):
-        """Exit for ratio spreads."""
-        entry_cost = pos.get("entry_cost", 0)
-        credit = pos.get("credit_received", 0)
-
-        if credit > 0:
-            # Net credit ratio: profit if stays in range
-            if current_value <= credit * 0.25:
-                return True, "ratio_profit", None
-            if current_value >= entry_cost * 0.5:
-                return True, "ratio_stop", None
-        else:
-            pnl_pct = (current_value - entry_cost) / entry_cost if entry_cost > 0 else 0
-            if pnl_pct >= 0.50:
-                return True, f"ratio_profit_{pnl_pct:+.0%}", None
-            if pnl_pct <= -0.40:
-                return True, f"ratio_stop_{pnl_pct:+.0%}", None
-
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.75:
-            return True, "ratio_eod_close", None
-
-        return False, "hold", None
-
-    def _should_roll(self, pos, pnl_pct):
-        if pnl_pct > -0.15 or pnl_pct < -0.30:
-            return False
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h >= 14.0:
-            return False
-        entry_time = pos.get("entry_time")
+        # 5. Time stop (tightens later in the day as theta accelerates)
         if entry_time:
             if isinstance(entry_time, str):
                 entry_time = datetime.fromisoformat(entry_time)
             mins = (datetime.now() - entry_time).total_seconds() / 60
-            if mins < 15:
-                return True
-        return False
+            if mins >= max_hold:
+                return True, f"time_{mins:.0f}min", None
+
+        # 6. Closing gate — align with EOD force-close at 2:45 PM CT
+        h = datetime.now().hour + datetime.now().minute / 60.0
+        if h >= 14.75:
+            return True, "closing", None
+
+        return False, "hold", None

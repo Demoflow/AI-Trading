@@ -211,13 +211,27 @@ class AggressiveScanner:
                 except Exception:
                     pass
 
+                # Normalize direction: flow_scanner returns "BULLISH"/"BEARISH"/"NEUTRAL"
+                # but contract_selector and strategy_engine expect "CALL" or "PUT".
+                # cp_ratio = call_vol / put_vol, so BULLISH = heavy call flow = buy CALL.
+                _flow_dir = flow.get("direction", "NEUTRAL")
+                if analysis.get("direction") not in ("CALL", "PUT"):
+                    if _flow_dir == "BULLISH":
+                        analysis["direction"] = "CALL"
+                    elif _flow_dir == "BEARISH":
+                        analysis["direction"] = "PUT"
+                    else:
+                        # NEUTRAL: in downtrending markets default to PUT, else skip
+                        _regime_str = str(getattr(self.analyzer, "regime", "")).upper()
+                        analysis["direction"] = "PUT" if "DOWN" in _regime_str else "CALL"
+
                 # REGIME GATE: In downtrends with high VIX, filter aggressively
                 regime_gate = True
                 try:
                     regime = self.analyzer.regime if hasattr(self.analyzer, 'regime') else ""
                     if any(x in str(regime).upper() for x in ["DOWN", "UNKNOWN", "CHOPPY"]) and vix > 25:
-                        if flow["direction"] == "CALL":
-                            # Require price above 20-day SMA for calls in downtrend
+                        if analysis["direction"] == "CALL":
+                            # Require stock above 20-day SMA + RSI > 50 for calls in downtrend
                             df = price_cache.get(sym)
                             if df is not None and len(df) >= 20:
                                 sma20 = df["close"].tail(20).mean()
@@ -226,8 +240,8 @@ class AggressiveScanner:
                                 if current < sma20 and rsi < 50:
                                     regime_gate = False
                                     skipped["filter"] += 1
-                        elif flow["direction"] == "PUT":
-                            # Boost PUT conviction in downtrends
+                        elif analysis["direction"] == "PUT":
+                            # Boost PUT conviction in downtrends — market tailwind
                             analysis["composite"] = min(100, analysis["composite"] + 10)
                 except Exception:
                     pass
@@ -312,7 +326,23 @@ class AggressiveScanner:
                 gex_profile = self.gex.analyze(sym, chain, analysis["price"])
                 gex_regime = gex_profile["regime"] if gex_profile else None
 
-                max_cost = min(self.equity * analysis["size_pct"], self.equity * 0.10)  # Cap at 10%% of equity
+                # Load per-position limits from elite_config (cap and floor).
+                # Floor prevents Kelly from starving positions on high-conviction
+                # trades. Cap prevents over-concentration.
+                import json as _jcfg, os as _os
+                _cfg_pos = {}
+                try:
+                    if _os.path.exists("config/elite_config.json"):
+                        with open("config/elite_config.json") as _fc:
+                            _cfg_pos = _jcfg.load(_fc)
+                except Exception:
+                    pass
+                _pos_cap = _cfg_pos.get("max_position_pct", 0.12)
+                _pos_floor = 0.07  # minimum 7% of equity per trade
+                max_cost = max(
+                    self.equity * _pos_floor,
+                    min(self.equity * analysis["size_pct"], self.equity * _pos_cap)
+                )
 
                 # Apply vol regime sizing
                 max_cost *= vol_regime["size_modifier"]

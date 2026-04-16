@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Small Cap Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <div class="title">
+        <span class="dot" id="statusDot"></span>
+        <span>SMALL CAP MOMENTUM TRADER</span>
+      </div>
+      <div class="meta">
+        <span id="statusText">CONNECTING...</span>
+        <span class="sep">|</span>
+        <span id="timestamp">--:--:--</span>
+      </div>
+    </header>
+
+    <!-- Summary row -->
+    <section class="summary">
+      <div class="card">
+        <div class="label">TODAY P&amp;L</div>
+        <div class="value" id="todayPnl">$--</div>
+      </div>
+      <div class="card">
+        <div class="label">OPEN P&amp;L</div>
+        <div class="value" id="openPnl">$--</div>
+      </div>
+      <div class="card">
+        <div class="label">TOTAL P&amp;L</div>
+        <div class="value" id="totalPnl">$--</div>
+      </div>
+      <div class="card">
+        <div class="label">TRADES</div>
+        <div class="value" id="tradeStats">--</div>
+      </div>
+      <div class="card">
+        <div class="label">DAILY LIMIT</div>
+        <div class="value" id="limitBar">--</div>
+        <div class="progress-wrap"><div class="progress-bar" id="limitProg"></div></div>
+      </div>
+      <div class="card">
+        <div class="label">CIRCUIT BREAKER</div>
+        <div class="value" id="strikeDisplay">--</div>
+      </div>
+    </section>
+
+    <!-- Main grid: positions + market + risk -->
+    <section class="main-grid">
+
+      <div class="panel">
+        <h2>OPEN POSITIONS <span class="count" id="openCount">0</span></h2>
+        <div id="positions" class="positions-list">
+          <div class="empty">No open positions</div>
+        </div>
+      </div>
+
+      <div class="side-panels">
+        <div class="panel">
+          <h2>MARKET</h2>
+          <div class="market-rows" id="market">
+            <div class="mkt-row">
+              <span class="mkt-label">SPY</span>
+              <span class="mkt-val" id="spyPrice">$--</span>
+              <span class="mkt-chg" id="spyChg">--</span>
+            </div>
+            <div class="mkt-row">
+              <span class="mkt-label">VIX</span>
+              <span class="mkt-val" id="vix">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>RISK STATUS</h2>
+          <div class="risk-rows" id="riskPanel">
+            <div class="risk-row"><span class="risk-label">Daily P&amp;L</span><span class="risk-val" id="rDailyPnl">--</span></div>
+            <div class="risk-row"><span class="risk-label">Limit used</span><span class="risk-val" id="rLimitPct">--</span></div>
+            <div class="risk-row"><span class="risk-label">Streak</span><span class="risk-val" id="rStreak">--</span></div>
+            <div class="risk-row"><span class="risk-label">Risk/trade</span><span class="risk-val">$250</span></div>
+            <div class="risk-row"><span class="risk-label">Status</span><span class="risk-val" id="rStatus">--</span></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Gap candidates -->
+    <div class="panel">
+      <h2>GAP CANDIDATES <span class="count" id="candCount">0</span>
+        <span class="subtitle">pre-market scan results</span>
+      </h2>
+      <div id="candidates" class="candidates-list">
+        <div class="empty">Waiting for pre-market scan...</div>
+      </div>
+    </div>
+
+    <!-- Closed trades today -->
+    <div class="panel">
+      <h2>CLOSED TODAY <span class="count" id="closedCount">0</span></h2>
+      <div id="closed" class="closed-list">
+        <div class="empty">No closed trades yet</div>
+      </div>
+    </div>
+
+    <!-- Live log -->
+    <div class="panel">
+      <h2>LIVE LOG</h2>
+      <div id="log" class="log"></div>
+    </div>
+
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

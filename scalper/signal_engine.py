@@ -1,12 +1,13 @@
 """
-Scalper Signal Engine v5 - Quant Rebuild.
-Philosophy: sell premium by default, buy direction only
-when conviction is overwhelming.
+Scalper Signal Engine v6 - Long Options Only.
+Philosophy: directional conviction buys only.
+- VWAP pullback (trend + mean-reversion entry)
+- EMA momentum (trend continuation)
+- ORB breakout (opening range expansion)
+- Momentum fade (overbought/oversold reversal)
 
-Iron condor is the bread-and-butter (range days).
-Directional buys require 3:1 minimum R:R.
-Expected move filters everything.
-Max 8 trades per day.
+All require minimum 3:1 R:R. All produce LONG_OPTION signals.
+Min confidence: 70. Strategy cooldown: 5 min per symbol-strategy pair.
 """
 
 from datetime import datetime
@@ -16,24 +17,22 @@ from loguru import logger
 class ScalperSignal:
 
     MIN_ATR = 0.20
-    MIN_CONFIDENCE = 70  # Raised from 65
-    MAX_PER_STRATEGY = 2  # Tighter: max 2 per type
-    STRATEGY_COOLDOWN = 1200  # 20 min cooldown
-    MIN_RR_DIRECTIONAL = 3.0  # 3:1 minimum for buys
+    MIN_CONFIDENCE = 70
+    MAX_PER_STRATEGY = 20   # Effectively uncapped for a trading day
+    STRATEGY_COOLDOWN = 300  # 5 min cooldown per symbol-strategy pair
+    MIN_RR_DIRECTIONAL = 3.0  # 3:1 minimum R:R on all buys
 
     def __init__(self):
         self.recent_signals = []
-        self._cooldown = {}
-        self._strategy_cooldown = {}
+        self._cooldown = {}          # Per-symbol 5-min cooldown after any signal
+        self._strategy_cooldown = {} # Per strategy-symbol pair
         self._strategy_count = {}
-        self._eod_pin_used = set()
         self._trade_date = None
 
     def _reset_daily(self):
         today = datetime.now().date()
         if self._trade_date != today:
             self._strategy_count = {}
-            self._eod_pin_used = set()
             self._trade_date = today
 
     def _can_use(self, strat, sym):
@@ -41,22 +40,19 @@ class ScalperSignal:
         count = self._strategy_count.get(strat, 0)
         if count >= self.MAX_PER_STRATEGY:
             return False
-        if strat == "EOD_PIN" and sym in self._eod_pin_used:
-            return False
         key = f"{strat}_{sym}"
         if key in self._strategy_cooldown:
-            if (datetime.now() - self._strategy_cooldown[key]).total_seconds() < self.STRATEGY_COOLDOWN:
+            elapsed = (datetime.now() - self._strategy_cooldown[key]).total_seconds()
+            if elapsed < self.STRATEGY_COOLDOWN:
                 return False
         return True
 
     def _record(self, strat, sym):
         self._strategy_count[strat] = self._strategy_count.get(strat, 0) + 1
         self._strategy_cooldown[f"{strat}_{sym}"] = datetime.now()
-        if strat == "EOD_PIN":
-            self._eod_pin_used.add(sym)
 
     def _check_rr(self, entry, stop, target):
-        """Enforce minimum 3:1 R:R on directional buys."""
+        """Enforce minimum 3:1 R:R on all directional buys."""
         risk = abs(entry - stop)
         reward = abs(target - entry)
         if risk <= 0:
@@ -66,12 +62,25 @@ class ScalperSignal:
 
     def scan(self, snapshot_5m, snapshot_1m=None,
              allowed_strategies=None, gex_profile=None,
-             breadth=None, expected_move=None):
+             breadth=None, expected_move=None,
+             pattern_context=None, time_context=None,
+             divergence=None, gex_wall_context=None):
         """
-        Dual timeframe scan.
-        5m = directional bias. 1m = entry confirmation.
+        Dual timeframe scan: 5m bias, 1m entry confirmation.
+        Only long calls and puts.
+
+        New in v6:
+          pattern_context  - from PatternEngine.analyze()
+          time_context     - from TimeContextFilter.get_context()
+          divergence       - from MarketInternals.get_divergence()
+          gex_wall_context - from IntradayGEX.get_wall_context()
         """
         if not snapshot_5m or snapshot_5m["candle_count"] < 5:
+            return []
+
+        # ── TIME CONTEXT GATE ──
+        # Hard gate: if this window doesn't allow entries, stop immediately.
+        if time_context and not time_context.get("entry_allowed", True):
             return []
 
         signals = []
@@ -79,6 +88,7 @@ class ScalperSignal:
         now = datetime.now()
         self._reset_daily()
 
+        # Per-symbol cooldown
         if sym in self._cooldown:
             if (now - self._cooldown[sym]).total_seconds() < 300:
                 return []
@@ -87,23 +97,20 @@ class ScalperSignal:
             return []
 
         if not allowed_strategies:
-            allowed_strategies = ["IRON_CONDOR", "CREDIT_SPREAD", "PREMIUM_SELL"]
+            allowed_strategies = ["VWAP_PULLBACK", "EMA_MOMENTUM"]
 
-        # Expected move filter - #1 priority
         em_filter = self._get_em_context(snapshot_5m, expected_move)
+
+        # Effective minimum confidence = base + time context boost
+        time_boost = time_context.get("min_confidence_boost", 0) if time_context else 0
+        effective_min = self.MIN_CONFIDENCE + time_boost
 
         for strat in allowed_strategies:
             if not self._can_use(strat, sym):
                 continue
 
             sig = None
-            if strat == "IRON_CONDOR":
-                sig = self._iron_condor(snapshot_5m, expected_move, gex_profile)
-            elif strat == "CREDIT_SPREAD":
-                sig = self._credit_spread(snapshot_5m, gex_profile, expected_move)
-            elif strat == "PREMIUM_SELL":
-                sig = self._premium_sell(snapshot_5m, gex_profile)
-            elif strat == "VWAP_PULLBACK":
+            if strat == "VWAP_PULLBACK":
                 sig = self._vwap_pullback(snapshot_5m, snapshot_1m, gex_profile, breadth, em_filter)
             elif strat in ("DIRECTIONAL_BUY", "EMA_MOMENTUM"):
                 sig = self._ema_momentum(snapshot_5m, snapshot_1m, gex_profile, breadth, em_filter)
@@ -112,34 +119,88 @@ class ScalperSignal:
             elif strat == "MOMENTUM_FADE":
                 sig = self._momentum_fade(snapshot_5m, snapshot_1m)
 
-            elif strat == "NAKED_PUT":
-                sig = self._naked_put(snapshot_5m, gex_profile, expected_move)
-            elif strat == "NAKED_CALL":
-                sig = self._naked_call(snapshot_5m, gex_profile, expected_move)
-            elif strat == "STRADDLE_SELL":
-                sig = self._straddle_sell(snapshot_5m, gex_profile, expected_move)
-            elif strat == "STRANGLE_SELL":
-                sig = self._strangle_sell(snapshot_5m, gex_profile, expected_move)
-            elif strat == "RATIO_SPREAD":
-                sig = self._ratio_spread(snapshot_5m, gex_profile, breadth)
-            elif strat == "EOD_PIN":
-                sig = self._eod_pin(snapshot_5m, gex_profile)
+            if not sig:
+                continue
 
-            if sig and sig["confidence"] >= self.MIN_CONFIDENCE:
-                # Hard blocks
-                if sig["structure"] == "LONG_OPTION":
-                    if breadth and not self._breadth_ok(breadth, sig["direction"]):
-                        continue
-                    if gex_profile and gex_profile.get("regime") == "POSITIVE":
-                        sig["confidence"] -= 10
-                        if sig["confidence"] < self.MIN_CONFIDENCE:
-                            continue
-                elif sig["structure"] in ("CREDIT_SPREAD", "IRON_CONDOR"):
-                    if gex_profile and gex_profile.get("regime") == "NEGATIVE" and sig["structure"] in ("CREDIT_SPREAD", "IRON_CONDOR", "NAKED_PUT", "NAKED_CALL", "STRADDLE", "STRANGLE"):
+            # ── PATTERN CONTEXT WEIGHT ──
+            if pattern_context and pattern_context.get("pattern"):
+                bias = pattern_context.get("direction_bias", "NEUTRAL")
+                wt   = pattern_context.get("confidence_weight", 0)
+                if bias == sig["direction"]:
+                    sig["confidence"] += wt          # Pattern aligns → boost
+                    sig["reason"] += f" | pat:{pattern_context['pattern']}+{wt}"
+                elif bias != "NEUTRAL":
+                    sig["confidence"] -= wt          # Pattern opposes → penalize
+                    sig["reason"] += f" | pat:{pattern_context['pattern']}-{wt}"
+
+            # ── DIVERGENCE FILTER ──
+            if divergence and divergence.get("type") not in ("NEUTRAL", None):
+                div_bias  = divergence.get("signal_bias", "NEUTRAL")
+                div_score = divergence.get("score", 0)
+                # Distribution while taking a CALL: hard confidence penalty
+                if div_bias == "PUT" and sig["direction"] == "CALL":
+                    sig["confidence"] -= min(abs(div_score) // 4, 20)
+                    sig["reason"] += f" | div:{divergence['type']}"
+                # Accumulation while taking a PUT: hard confidence penalty
+                elif div_bias == "CALL" and sig["direction"] == "PUT":
+                    sig["confidence"] -= min(abs(div_score) // 4, 20)
+                    sig["reason"] += f" | div:{divergence['type']}"
+                # Aligned divergence: small boost
+                elif div_bias == sig["direction"]:
+                    sig["confidence"] += min(abs(div_score) // 8, 8)
+
+            # ── GEX WALL CONTEXT ──
+            if gex_wall_context:
+                approaching = gex_wall_context.get("approaching_wall")
+                if approaching:
+                    # Near call wall → bearish; near put wall → bullish
+                    call_wall = gex_wall_context.get("call_wall", 0)
+                    put_wall  = gex_wall_context.get("put_wall",  0)
+                    cws = gex_wall_context.get("call_wall_score")
+                    pws = gex_wall_context.get("put_wall_score")
+
+                    if approaching == call_wall and cws:
+                        if cws["recommendation"] == "FADE" and sig["direction"] == "PUT":
+                            sig["confidence"] += 8  # Third test fade → boost PUT near call wall
+                            sig["reason"] += f" | gex_wall_fade(wall ${call_wall})"
+                        elif cws["recommendation"] == "MOMENTUM" and sig["direction"] == "CALL":
+                            sig["confidence"] += 8  # Wall absorbed → boost CALL
+                            sig["reason"] += f" | gex_wall_momentum(wall ${call_wall})"
+
+                    if approaching == put_wall and pws:
+                        if pws["recommendation"] == "FADE" and sig["direction"] == "CALL":
+                            sig["confidence"] += 8
+                            sig["reason"] += f" | gex_wall_fade(wall ${put_wall})"
+                        elif pws["recommendation"] == "MOMENTUM" and sig["direction"] == "PUT":
+                            sig["confidence"] += 8
+                            sig["reason"] += f" | gex_wall_momentum(wall ${put_wall})"
+
+            # ── STANDARD HARD BLOCKS ──
+            if sig["confidence"] < effective_min:
+                continue
+
+            if breadth and not self._breadth_ok(breadth, sig["direction"]):
+                continue
+
+            if gex_profile and gex_profile.get("regime") == "POSITIVE":
+                sig["confidence"] -= 10
+                if sig["confidence"] < effective_min:
+                    continue
+
+            # ── GAP ALIGNMENT GATE (opening window only) ──
+            if time_context and time_context.get("gap_aligned_only"):
+                gap_dir = time_context.get("gap_direction", "FLAT")
+                if gap_dir != "FLAT":
+                    needed = "CALL" if gap_dir == "UP" else "PUT"
+                    if sig["direction"] != needed:
+                        logger.debug(
+                            f"  Opening gap block: {sym} {sig['direction']} "
+                            f"vs gap {gap_dir}"
+                        )
                         continue
 
-                self._record(strat, sym)
-                signals.append(sig)
+            self._record(strat, sym)
+            signals.append(sig)
 
         if signals:
             self._cooldown[sym] = now
@@ -147,9 +208,8 @@ class ScalperSignal:
         return signals
 
     def _get_em_context(self, snap, em):
-        """Expected move context."""
         if not em:
-            return {"inside": True, "pct_used": 0}
+            return {"inside": True, "pct_used": 0, "exhausted": False}
         price = snap["price"]
         move_from_open = abs(price - (em["upper_bound"] + em["lower_bound"]) / 2)
         pct_used = move_from_open / em["expected_move"] if em["expected_move"] > 0 else 0
@@ -168,154 +228,21 @@ class ScalperSignal:
             return False
         return True
 
-    def _gex_bonus(self, gex, structure):
+    def _gex_bonus(self, gex):
+        """GEX negative = supportive for directional long options."""
         if not gex:
             return 0
         r = gex.get("regime", "")
-        if r == "POSITIVE" and structure in ("CREDIT_SPREAD", "IRON_CONDOR", "NAKED_PUT", "NAKED_CALL", "STRADDLE", "STRANGLE", "RATIO_SPREAD"):
+        if r == "NEGATIVE":
             return 10
-        if r == "NEGATIVE" and structure == "LONG_OPTION":
-            return 10
-        if r == "POSITIVE" and structure == "LONG_OPTION":
+        if r == "POSITIVE":
             return -10
         return 0
 
-    # â”€â”€ PREMIUM SELLING STRATEGIES (DEFAULT) â”€â”€
-
-    def _iron_condor(self, snap, em=None, gex=None):
-        """Bread-and-butter: iron condor on range days."""
-        price = snap["price"]
-        vwap = snap["vwap"]
-        if not vwap:
-            return None
-        if abs(snap["vwap_pct"]) > 0.12:
-            return None
-        # ATR-relative move check: block IC on gap/volatile days
-        atr = snap.get("atr", 1)
-        day_move = abs(snap.get("price", 0) - snap.get("session_open", snap.get("price", 0)))
-        if atr > 0 and day_move / atr > 1.5:
-            return None
-        if snap["rsi"] < 35 or snap["rsi"] > 65:
-            return None
-
-        # Must be inside expected move
-        if em:
-            if price > em["upper_bound"] or price < em["lower_bound"]:
-                return None
-
-        conf = 72
-        if not snap["volume_surge"]:
-            conf += 5
-        if 42 < snap["rsi"] < 58:
-            conf += 8
-        conf += self._gex_bonus(gex, "IRON_CONDOR")
-        if em:
-            conf += 5
-
-        return {
-            "type": "IRON_CONDOR", "structure": "IRON_CONDOR",
-            "direction": "NEUTRAL", "symbol": snap["symbol"],
-            "price": price, "confidence": min(conf, 92),
-            "vwap": vwap,
-            "reason": f"IC range RSI:{snap['rsi']:.0f} VWAP:{snap['vwap_pct']:+.2f}%",
-            "stop_level": round(price - snap["atr"] * 2, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _credit_spread(self, snap, gex=None, em=None):
-        price = snap["price"]
-        vwap = snap["vwap"]
-        if not vwap:
-            return None
-        if abs(snap["macd_histogram"]) > 0.5:
-            return None
-        if snap["rsi"] < 30 or snap["rsi"] > 70:
-            return None
-        if abs(snap["vwap_pct"]) > 0.15:
-            return None
-        if em and not (em["lower_bound"] <= price <= em["upper_bound"]):
-            return None
-
-        conf = 68
-        if not snap["volume_surge"]:
-            conf += 5
-        if 40 < snap["rsi"] < 60:
-            conf += 8
-        conf += self._gex_bonus(gex, "CREDIT_SPREAD")
-
-        return {
-            "type": "CREDIT_SPREAD", "structure": "CREDIT_SPREAD",
-            "direction": "CALL",
-            "symbol": snap["symbol"],
-            "price": price, "confidence": min(conf, 90),
-            "vwap": vwap,
-            "reason": f"Credit RSI:{snap['rsi']:.0f}",
-            "stop_level": round(price - snap["atr"] * 1.5, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _premium_sell(self, snap, gex=None):
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h < 13.0:
-            return None
-        price = snap["price"]
-        if abs(snap["vwap_pct"]) > 0.20:
-            return None
-
-        conf = 68
-        if h >= 14.0:
-            conf += 8
-        if 40 < snap["rsi"] < 60:
-            conf += 8
-        conf += self._gex_bonus(gex, "CREDIT_SPREAD")
-
-        direction = "CALL" if price > snap["vwap"] else "PUT"
-        return {
-            "type": "PREMIUM_SELL", "structure": "CREDIT_SPREAD",
-            "direction": direction,
-            "symbol": snap["symbol"],
-            "price": price, "confidence": min(conf, 90),
-            "vwap": snap["vwap"],
-            "reason": f"Theta sell {h:.1f}h",
-            "stop_level": round(
-                price - snap["atr"]*1.5 if direction == "CALL"
-                else price + snap["atr"]*1.5, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _eod_pin(self, snap, gex=None):
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        if h < 14.0 or not gex:
-            return None
-        price = snap["price"]
-        pin = gex.get("pin_level", price)
-        if abs(price - pin) / price > 0.003:
-            return None
-
-        conf = 72
-        if gex.get("regime") == "POSITIVE":
-            conf += 10
-        if 40 < snap["rsi"] < 60:
-            conf += 5
-
-        return {
-            "type": "EOD_PIN", "structure": "CREDIT_SPREAD",
-            "direction": "CALL",
-            "symbol": snap["symbol"],
-            "price": price, "confidence": min(conf, 90),
-            "vwap": snap["vwap"],
-            "reason": f"Pin ${pin} GEX:{gex['regime']}",
-            "stop_level": round(pin - snap["atr"], 2),
-            "target_level": round(pin, 2),
-            "time": datetime.now(),
-        }
-
-    # â”€â”€ DIRECTIONAL STRATEGIES (EXCEPTION, NOT RULE) â”€â”€
+    # ── DIRECTIONAL STRATEGIES ─────────────────────────────────────────────────
 
     def _vwap_pullback(self, snap5, snap1, gex, breadth, em_ctx):
+        """VWAP pullback entry: price returns to VWAP in trending environment."""
         price = snap5["price"]
         vwap = snap5["vwap"]
         if not vwap:
@@ -323,16 +250,15 @@ class ScalperSignal:
         vd = abs(snap5["vwap_pct"])
         if not (0.03 <= vd <= 0.25):
             return None
-        # Don't buy direction if move is exhausted
         if em_ctx.get("exhausted"):
             return None
 
         atr = snap5["atr"]
         cur = snap5.get("current_candle", {})
 
-        # BULLISH
+        # BULLISH PULLBACK
         if (snap5["ema_trend"] == "UP" and snap5["rsi"] < 60 and
-            -0.50 <= snap5["price_vs_vwap"] <= 0.30):
+                -0.50 <= snap5["price_vs_vwap"] <= 0.30):
             stop = round(vwap - atr * 0.5, 2)
             target = round(price + atr * 2.0, 2)
             rr_ok, rr = self._check_rr(price, stop, target)
@@ -346,12 +272,19 @@ class ScalperSignal:
                 conf += 8
             if snap5["macd_histogram"] > 0:
                 conf += 8
-            # 1-min confirmation
             if snap1 and snap1.get("momentum") == "BULLISH":
                 conf += 10
             if cur and cur.get("close", 0) > cur.get("open", 0):
                 conf += 5
-            conf += self._gex_bonus(gex, "LONG_OPTION")
+            # EMA slope: rising EMA9 confirms pullback entry
+            if snap5.get("ema9_slope") == "UP":
+                conf += 6
+            # EMA50 macro trend alignment
+            if snap5.get("ema50_trend") == "UP":
+                conf += 6
+            elif snap5.get("ema50_trend") == "DOWN":
+                conf -= 8   # Counter-trend to macro — penalize
+            # GEX handled in outer scan() loop — do not apply here (avoid double-count)
 
             return {
                 "type": "VWAP_PULLBACK", "structure": "LONG_OPTION",
@@ -363,9 +296,9 @@ class ScalperSignal:
                 "time": datetime.now(),
             }
 
-        # BEARISH
+        # BEARISH PULLBACK
         if (snap5["ema_trend"] == "DOWN" and snap5["rsi"] > 40 and
-            -0.30 <= snap5["price_vs_vwap"] <= 0.50):
+                -0.30 <= snap5["price_vs_vwap"] <= 0.50):
             stop = round(vwap + atr * 0.5, 2)
             target = round(price - atr * 2.0, 2)
             rr_ok, rr = self._check_rr(price, stop, target)
@@ -383,7 +316,15 @@ class ScalperSignal:
                 conf += 10
             if cur and cur.get("close", 0) < cur.get("open", 0):
                 conf += 5
-            conf += self._gex_bonus(gex, "LONG_OPTION")
+            # EMA slope: falling EMA9 confirms pullback entry
+            if snap5.get("ema9_slope") == "DOWN":
+                conf += 6
+            # EMA50 macro trend alignment
+            if snap5.get("ema50_trend") == "DOWN":
+                conf += 6
+            elif snap5.get("ema50_trend") == "UP":
+                conf -= 8   # Counter-trend to macro — penalize
+            # GEX handled in outer scan() loop — do not apply here (avoid double-count)
 
             return {
                 "type": "VWAP_PULLBACK", "structure": "LONG_OPTION",
@@ -397,12 +338,13 @@ class ScalperSignal:
         return None
 
     def _ema_momentum(self, snap5, snap1, gex, breadth, em_ctx):
+        """EMA crossover momentum continuation."""
         price = snap5["price"]
         if em_ctx.get("exhausted"):
             return None
-
         atr = snap5["atr"]
 
+        # BULLISH CROSS
         if snap5["ema_cross_up"] and snap5["macd_histogram"] > 0 and snap5["price_vs_vwap"] > 0:
             stop = round((snap5["ema21"] or price) - atr * 0.5, 2)
             target = round(price + atr * 2.5, 2)
@@ -416,19 +358,32 @@ class ScalperSignal:
             if 50 < snap5["rsi"] < 70:
                 conf += 8
             if snap1 and snap1.get("ema_cross_up"):
-                conf += 10  # 1-min confirms
-            conf += self._gex_bonus(gex, "LONG_OPTION")
+                conf += 10
+            # EMA slope: rising EMA9 adds momentum confirmation
+            if snap5.get("ema9_slope") == "UP":
+                conf += 6
+            # Donchian structural breakout: EMA cross + channel breakout = high conviction
+            if snap5.get("dc_breakout_up"):
+                conf += 12
+            # EMA50 macro alignment
+            if snap5.get("ema50_trend") == "UP":
+                conf += 6
+            elif snap5.get("ema50_trend") == "DOWN":
+                conf -= 8
+            # GEX handled in outer scan() loop — do not apply here (avoid double-count)
 
+            dc_tag = " DC_BRK" if snap5.get("dc_breakout_up") else ""
             return {
                 "type": "EMA_MOMENTUM", "structure": "LONG_OPTION",
                 "direction": "CALL", "symbol": snap5["symbol"],
                 "price": price, "confidence": min(conf, 95),
                 "vwap": snap5["vwap"], "rr_ratio": rr,
-                "reason": f"EMA cross UP RSI:{snap5['rsi']:.0f} RR:{rr}:1",
+                "reason": f"EMA cross UP RSI:{snap5['rsi']:.0f} RR:{rr}:1{dc_tag}",
                 "stop_level": stop, "target_level": target,
                 "time": datetime.now(),
             }
 
+        # BEARISH CROSS
         if snap5["ema_cross_down"] and snap5["macd_histogram"] < 0 and snap5["price_vs_vwap"] < 0:
             stop = round((snap5["ema21"] or price) + atr * 0.5, 2)
             target = round(price - atr * 2.5, 2)
@@ -443,22 +398,35 @@ class ScalperSignal:
                 conf += 8
             if snap1 and snap1.get("ema_cross_down"):
                 conf += 10
-            conf += self._gex_bonus(gex, "LONG_OPTION")
+            # EMA slope: falling EMA9 adds momentum confirmation
+            if snap5.get("ema9_slope") == "DOWN":
+                conf += 6
+            # Donchian structural breakout below channel
+            if snap5.get("dc_breakout_down"):
+                conf += 12
+            # EMA50 macro alignment
+            if snap5.get("ema50_trend") == "DOWN":
+                conf += 6
+            elif snap5.get("ema50_trend") == "UP":
+                conf -= 8
+            # GEX handled in outer scan() loop — do not apply here (avoid double-count)
 
+            dc_tag = " DC_BRK" if snap5.get("dc_breakout_down") else ""
             return {
                 "type": "EMA_MOMENTUM", "structure": "LONG_OPTION",
                 "direction": "PUT", "symbol": snap5["symbol"],
                 "price": price, "confidence": min(conf, 95),
                 "vwap": snap5["vwap"], "rr_ratio": rr,
-                "reason": f"EMA cross DN RSI:{snap5['rsi']:.0f} RR:{rr}:1",
+                "reason": f"EMA cross DN RSI:{snap5['rsi']:.0f} RR:{rr}:1{dc_tag}",
                 "stop_level": stop, "target_level": target,
                 "time": datetime.now(),
             }
         return None
 
     def _orb_breakout(self, snap5, snap1, breadth, em_ctx):
+        """Opening range breakout — first 30 min only."""
         h = datetime.now().hour + datetime.now().minute / 60.0
-        if not (8.75 <= h <= 9.5):
+        if not (8.58 <= h <= 9.5):
             return None
         if em_ctx.get("exhausted"):
             return None
@@ -469,6 +437,7 @@ class ScalperSignal:
             return None
         atr = snap5["atr"]
 
+        # BULLISH BREAK
         if snap5["or_breakout_up"] and snap5["volume_surge"] and snap5["macd_histogram"] > 0:
             stop = round(or_h - atr * 0.3, 2)
             target = round(price + (or_h - or_l) * 1.5, 2)
@@ -492,6 +461,7 @@ class ScalperSignal:
                 "time": datetime.now(),
             }
 
+        # BEARISH BREAK
         if snap5["or_breakout_down"] and snap5["volume_surge"] and snap5["macd_histogram"] < 0:
             stop = round(or_l + atr * 0.3, 2)
             target = round(price - (or_h - or_l) * 1.5, 2)
@@ -517,10 +487,18 @@ class ScalperSignal:
         return None
 
     def _momentum_fade(self, snap5, snap1):
+        """Fade overbought/oversold extremes back toward VWAP."""
         price = snap5["price"]
         atr = snap5["atr"]
 
-        if snap5["rsi"] > 78 and snap5["vwap_band"] in ("EXTREME_OB", "OB") and price > snap5["bb_upper"]:
+        # FADE OVERBOUGHT → buy put
+        # Hard block: don't fade a Donchian structural breakout upward
+        if snap5.get("dc_breakout_up"):
+            return None
+
+        if (snap5["rsi"] > 78 and
+                snap5["vwap_band"] in ("EXTREME_OB", "OB") and
+                price > snap5["bb_upper"]):
             stop = round(price + atr * 0.5, 2)
             target = round(snap5["vwap"], 2)
             rr_ok, rr = self._check_rr(price, stop, target)
@@ -543,7 +521,14 @@ class ScalperSignal:
                 "time": datetime.now(),
             }
 
-        if snap5["rsi"] < 22 and snap5["vwap_band"] in ("EXTREME_OS", "OS") and price < snap5["bb_lower"]:
+        # FADE OVERSOLD → buy call
+        # Hard block: don't fade a Donchian structural breakout downward
+        if snap5.get("dc_breakout_down"):
+            return None
+
+        if (snap5["rsi"] < 22 and
+                snap5["vwap_band"] in ("EXTREME_OS", "OS") and
+                price < snap5["bb_lower"]):
             stop = round(price - atr * 0.5, 2)
             target = round(snap5["vwap"], 2)
             rr_ok, rr = self._check_rr(price, stop, target)
@@ -566,186 +551,3 @@ class ScalperSignal:
                 "time": datetime.now(),
             }
         return None
-
-    # ══ LEVEL 3 STRATEGIES ══
-
-    def _naked_put(self, snap5, gex=None, em=None):
-        """
-        Sell naked put: bullish, collect premium.
-        Best on range-bound or mildly bullish days.
-        GEX positive preferred (mean-reverting).
-        """
-        price = snap5["price"]
-        vwap = snap5["vwap"]
-        if not vwap:
-            return None
-        # Only sell puts when price is above VWAP (bullish bias)
-        if snap5["price_vs_vwap"] < -0.10:
-            return None
-        if snap5["rsi"] < 35:
-            return None  # Don't sell puts into weakness
-        if em and price < em["lower_bound"]:
-            return None  # Outside expected move
-
-        conf = 70
-        if snap5["ema_trend"] == "UP":
-            conf += 8
-        if 45 < snap5["rsi"] < 65:
-            conf += 5
-        conf += self._gex_bonus(gex, "NAKED_PUT")
-
-        return {
-            "type": "NAKED_PUT", "structure": "NAKED_PUT",
-            "direction": "PUT", "symbol": snap5["symbol"],
-            "price": price, "confidence": min(conf, 92),
-            "vwap": vwap,
-            "reason": f"Naked put sell RSI:{snap5['rsi']:.0f} EMA:{snap5['ema_trend']}",
-            "stop_level": round(price - snap5["atr"] * 2, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _naked_call(self, snap5, gex=None, em=None):
-        """
-        Sell naked call: bearish, collect premium.
-        Best on range-bound or mildly bearish days.
-        """
-        price = snap5["price"]
-        vwap = snap5["vwap"]
-        if not vwap:
-            return None
-        if snap5["price_vs_vwap"] > 0.10:
-            return None
-        if snap5["rsi"] > 65:
-            return None
-        if em and price > em["upper_bound"]:
-            return None
-
-        conf = 70
-        if snap5["ema_trend"] == "DOWN":
-            conf += 8
-        if 35 < snap5["rsi"] < 55:
-            conf += 5
-        conf += self._gex_bonus(gex, "NAKED_CALL")
-
-        return {
-            "type": "NAKED_CALL", "structure": "NAKED_CALL",
-            "direction": "CALL", "symbol": snap5["symbol"],
-            "price": price, "confidence": min(conf, 92),
-            "vwap": vwap,
-            "reason": f"Naked call sell RSI:{snap5['rsi']:.0f} EMA:{snap5['ema_trend']}",
-            "stop_level": round(price + snap5["atr"] * 2, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _straddle_sell(self, snap5, gex=None, em=None):
-        """
-        Sell ATM straddle: neutral, max premium collection.
-        Only on very range-bound days with low momentum.
-        GEX must be positive (pinning environment).
-        """
-        price = snap5["price"]
-        vwap = snap5["vwap"]
-        if not vwap:
-            return None
-        if abs(snap5["vwap_pct"]) > 0.08:
-            return None  # Must be very close to VWAP
-        if snap5["rsi"] < 40 or snap5["rsi"] > 60:
-            return None
-        if abs(snap5["macd_histogram"]) > 0.3:
-            return None  # Low momentum required
-        # GEX must be positive for straddle selling
-        if gex and gex.get("regime") != "POSITIVE":
-            return None
-
-        conf = 72
-        if not snap5["volume_surge"]:
-            conf += 5
-        if 45 < snap5["rsi"] < 55:
-            conf += 8
-        if em:
-            conf += 5
-
-        return {
-            "type": "STRADDLE_SELL", "structure": "STRADDLE",
-            "direction": "NEUTRAL", "symbol": snap5["symbol"],
-            "price": price, "confidence": min(conf, 92),
-            "vwap": vwap,
-            "reason": f"Straddle sell RSI:{snap5['rsi']:.0f} GEX:POS",
-            "stop_level": round(price - snap5["atr"] * 2.5, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _strangle_sell(self, snap5, gex=None, em=None):
-        """
-        Sell OTM strangle: neutral with wider cushion.
-        More forgiving than straddle.
-        """
-        price = snap5["price"]
-        vwap = snap5["vwap"]
-        if not vwap:
-            return None
-        if abs(snap5["vwap_pct"]) > 0.12:
-            return None
-        if snap5["rsi"] < 35 or snap5["rsi"] > 65:
-            return None
-
-        conf = 70
-        if not snap5["volume_surge"]:
-            conf += 5
-        if 40 < snap5["rsi"] < 60:
-            conf += 8
-        conf += self._gex_bonus(gex, "STRANGLE")
-        if em:
-            conf += 3
-
-        return {
-            "type": "STRANGLE_SELL", "structure": "STRANGLE",
-            "direction": "NEUTRAL", "symbol": snap5["symbol"],
-            "price": price, "confidence": min(conf, 92),
-            "vwap": vwap,
-            "reason": f"Strangle sell RSI:{snap5['rsi']:.0f}",
-            "stop_level": round(price - snap5["atr"] * 3, 2),
-            "target_level": round(price, 2),
-            "time": datetime.now(),
-        }
-
-    def _ratio_spread(self, snap5, gex=None, breadth=None):
-        """
-        Ratio spread: directional + premium income.
-        Buy 1 ATM, sell 2 OTM. Net credit or small debit.
-        """
-        price = snap5["price"]
-        if snap5["rsi"] < 30 or snap5["rsi"] > 70:
-            return None
-
-        direction = None
-        if snap5["ema_trend"] == "UP" and snap5["momentum"] == "BULLISH":
-            direction = "CALL"
-        elif snap5["ema_trend"] == "DOWN" and snap5["momentum"] == "BEARISH":
-            direction = "PUT"
-
-        if not direction:
-            return None
-
-        conf = 68
-        if snap5["volume_surge"]:
-            conf += 8
-        conf += self._gex_bonus(gex, "RATIO_SPREAD")
-
-        return {
-            "type": "RATIO_SPREAD", "structure": "RATIO_SPREAD",
-            "direction": direction, "symbol": snap5["symbol"],
-            "price": price, "confidence": min(conf, 88),
-            "vwap": snap5["vwap"],
-            "reason": f"Ratio {direction} RSI:{snap5['rsi']:.0f}",
-            "stop_level": round(
-                price - snap5["atr"] * 1.5 if direction == "CALL"
-                else price + snap5["atr"] * 1.5, 2),
-            "target_level": round(
-                price + snap5["atr"] * 1.5 if direction == "CALL"
-                else price - snap5["atr"] * 1.5, 2),
-            "time": datetime.now(),
-        }
