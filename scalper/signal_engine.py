@@ -33,6 +33,8 @@ class ScalperSignal:
         today = datetime.now().date()
         if self._trade_date != today:
             self._strategy_count = {}
+            self._cooldown.clear()           # Stale cooldowns from yesterday block today's trades
+            self._strategy_cooldown.clear()  # Same for strategy-level cooldowns
             self._trade_date = today
 
     def _can_use(self, strat, sym):
@@ -183,7 +185,9 @@ class ScalperSignal:
                 continue
 
             if gex_profile and gex_profile.get("regime") == "POSITIVE":
-                sig["confidence"] -= 10
+                # POSITIVE GEX pins price at walls — directional options decay fast.
+                # Steeper penalty (was -10) to force higher-conviction entries only.
+                sig["confidence"] -= 20
                 if sig["confidence"] < effective_min:
                     continue
 
@@ -248,7 +252,9 @@ class ScalperSignal:
         if not vwap:
             return None
         vd = abs(snap5["vwap_pct"])
-        if not (0.03 <= vd <= 0.25):
+        # Require a meaningful pullback (0.10%+). Anything closer than 0.10%
+        # is noise on a flat/pinned day — the spread eats the move before it starts.
+        if not (0.10 <= vd <= 0.50):
             return None
         if em_ctx.get("exhausted"):
             return None

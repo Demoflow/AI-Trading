@@ -10,6 +10,16 @@ from collections import deque
 from datetime import datetime
 from loguru import logger
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
 
 # Canonical transition types and their strategy implications
 TRANSITION_IMPLICATIONS = {
@@ -103,7 +113,7 @@ class DayClassifier:
 
             # Seed history with initial classification
             self._regime_history.append({
-                "time": datetime.now(),
+                "time": _now_ct(),
                 "day_type": self.day_type,
                 "atr": atr or 0,
             })
@@ -175,7 +185,7 @@ class DayClassifier:
             self._last_atr = atr
 
         snapshot = {
-            "time": datetime.now(),
+            "time": _now_ct(),
             "day_type": new_type,
             "atr": atr_val,
         }

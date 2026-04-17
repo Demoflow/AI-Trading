@@ -15,6 +15,17 @@ import httpx
 from datetime import datetime
 from loguru import logger
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _hour_ct() -> float:
+    n = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+    return n.hour + n.minute / 60.0 + n.second / 3600.0
+
 
 class ContractPicker:
 
@@ -30,25 +41,25 @@ class ContractPicker:
         self._spread_history = []
 
     def _get_max_spread(self):
-        h = datetime.now().hour + datetime.now().minute / 60.0
-        return self.MAX_SPREAD_PCT_POWER if h >= 14.5 else self.MAX_SPREAD_PCT
+        return self.MAX_SPREAD_PCT_POWER if _hour_ct() >= 14.5 else self.MAX_SPREAD_PCT
 
     def _smart_dte(self, structure, confidence=70):
-        h = datetime.now().hour + datetime.now().minute / 60.0
+        h = _hour_ct()
         # Selling strategies: always 0DTE for max theta
         if structure in ("NAKED_PUT", "NAKED_CALL", "STRADDLE",
                          "STRANGLE", "CREDIT_SPREAD", "IRON_CONDOR",
                          "RATIO_SPREAD"):
             return 0
-        # Buying: 1DTE unless very high conviction
-        if structure == "LONG_OPTION" and confidence < 85:
-            return 1
-        if h < 10.5:
-            return 0
+        if structure == "LONG_OPTION":
+            # Early session (< 10:30 AM CT): always 0DTE for maximum gamma
+            if h < 10.5:
+                return 0
+            # Later session: 1DTE for lower-confidence trades to reduce theta risk
+            return 0 if confidence >= 85 else 1
         return 1
 
     def should_allow_buy(self, confidence):
-        h = datetime.now().hour + datetime.now().minute / 60.0
+        h = _hour_ct()
         if h >= 13.5 and confidence < 85:
             return False, "theta_block_afternoon"
         if h >= 14.5 and confidence < 90:
@@ -787,7 +798,6 @@ class ContractPicker:
             if collateral > max_cost:
                 return None
 
-            from loguru import logger
             logger.info(
                 f"IC: {symbol} put ${short_put['strike']}/{long_put['strike']} "
                 f"call ${short_call['strike']}/{long_call['strike']} "
@@ -806,6 +816,5 @@ class ContractPicker:
                 "qty": 1,
             }
         except Exception as e:
-            from loguru import logger
             logger.warning(f"IC pick error {symbol}: {e}")
             return None

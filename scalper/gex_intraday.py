@@ -15,6 +15,16 @@ from collections import defaultdict, deque
 from datetime import datetime
 from loguru import logger
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
 APPROACH_THRESHOLD = 0.003  # Within 0.3% of a level = "approaching"
 ABSORBED_THRESHOLD = 0.004  # Price moved 0.4%+ through the level = absorbed
 
@@ -213,7 +223,7 @@ class IntradayGEX:
                     self._in_approach[symbol] = {
                         "level":          wall,
                         "approach_price": current_price,
-                        "time":           datetime.now(),
+                        "time":           _now_ct(),
                     }
                     logger.debug(
                         f"GEX approach: {symbol} price ${current_price:.2f} "
@@ -224,7 +234,7 @@ class IntradayGEX:
     def _record_result(self, symbol, level, price, result):
         key = (symbol, round(level, 2))
         self._interactions[key].append({
-            "time":   datetime.now(),
+            "time":   _now_ct(),
             "price":  round(price, 2),
             "result": result,
         })

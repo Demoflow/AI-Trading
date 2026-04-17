@@ -15,6 +15,21 @@ import sys
 import time
 from datetime import datetime
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
+
+def _hour_ct() -> float:
+    n = _now_ct()
+    return n.hour + n.minute / 60.0 + n.second / 3600.0
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from loguru import logger
@@ -24,6 +39,36 @@ load_dotenv()
 
 POLL_INTERVAL = 5
 SCALP_EQUITY  = 25000
+
+import json as _json
+
+_SCALPER_OVERRIDES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "config", "agent_overrides.json"
+)
+_scalper_ov_mtime: float = 0.0
+_scalper_ov_cache: dict = {}
+
+
+def _load_scalper_overrides() -> dict:
+    global _scalper_ov_mtime, _scalper_ov_cache
+    try:
+        mtime = os.path.getmtime(_SCALPER_OVERRIDES_PATH)
+        if mtime != _scalper_ov_mtime:
+            with open(_SCALPER_OVERRIDES_PATH, "r") as f:
+                _scalper_ov_cache = _json.load(f)
+            _scalper_ov_mtime = mtime
+    except Exception:
+        pass
+    return _scalper_ov_cache
+
+
+def _save_scalper_overrides(data: dict):
+    try:
+        with open(_SCALPER_OVERRIDES_PATH, "w") as f:
+            _json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 SYMBOLS = [
     # Broad market ETFs
@@ -142,6 +187,31 @@ def run():
 
     risk.update_equity(executor.portfolio.get("equity", SCALP_EQUITY))
 
+    # Reconcile risk state against executor's portfolio history for today.
+    # _load_state() already tried disk; this cross-checks against trade records
+    # in case the state file is stale or missing (e.g. first run of the day).
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+    _ds = executor.portfolio.get("daily_stats", {}).get(_today, {})
+    if _ds.get("trades", 0) > risk.trades_today:
+        risk.trades_today = _ds["trades"]
+        risk.daily_pnl    = _ds.get("pnl", 0.0)
+        # Reconstruct consecutive losses from recent history
+        _hist = executor.portfolio.get("history", [])
+        _today_hist = [t for t in _hist if t.get("entry_time", "")[:10] == _today]
+        _streak = 0
+        for _t in reversed(_today_hist):
+            if _t.get("pnl", 0) < 0:
+                _streak += 1
+            else:
+                break
+        risk._consecutive_losses = max(risk._consecutive_losses, _streak)
+        logger.info(
+            f"Risk state reconciled from history: "
+            f"trades={risk.trades_today} pnl=${risk.daily_pnl:+,.2f} "
+            f"streak={risk._consecutive_losses}"
+        )
+
     # VIX
     vix = 20
     try:
@@ -157,9 +227,10 @@ def run():
         logger.warning(f"EVENT DAY: {event} — entry bar raised automatically")
 
     # Cycle tracking
-    cycle         = 0
-    classified    = False
-    gap_captured  = False
+    cycle           = 0
+    classified      = False
+    gap_captured    = False
+    _force_closed   = False  # Ensures the EOD force-close block runs only once per day
 
     # Cached market context (refresh intervals in cycles, 1 cycle = 5s)
     gex_cache     = {}
@@ -179,35 +250,58 @@ def run():
     atexit.register(_release_lock, lock_path)
 
     while True:
-        now = datetime.now()
-        h   = now.hour + now.minute / 60.0
+        now = _now_ct()
+        h   = _hour_ct()
+
+        # ── AGENT OVERRIDE CHECK ──
+        _ov = _load_scalper_overrides()
+        _scalper_paused  = _ov.get("scalper_paused", False)
+        _blocked_scalper = set(s.upper() for s in _ov.get("blocked_symbols", []))
+        if _ov.get("flatten_all"):
+            logger.warning("[Agent] FLATTEN ALL received — closing all scalper positions")
+            for pos in executor.get_open_positions():
+                csym = pos.get("contract", "")
+                if csym:
+                    current = get_option_value(client, csym)
+                    result  = executor.close_position(pos["id"], current if current else 0.01)
+                    if result["status"] == "CLOSED":
+                        risk.record_trade(result["pnl"])
+                        logger.info(f"[Agent] FLATTEN: {pos['symbol']} P&L=${result['pnl']:+,.2f}")
+            _ov["flatten_all"] = False
+            _save_scalper_overrides(_ov)
 
         # ── SYNC POSITION COUNT AND EQUITY EACH CYCLE ──
         risk.open_positions = len(executor.get_open_positions())
         risk.update_equity(executor.portfolio.get("equity", SCALP_EQUITY))
 
-        # ── FORCE-CLOSE ALL POSITIONS AT 3:45 PM ET (2:45 PM CT) ──
-        if 14.75 <= h < 14.85 and cycle > 0:
+        # ── FORCE-CLOSE ALL POSITIONS AT 2:45 PM CT (3:45 PM ET) ──
+        # _force_closed flag prevents this from re-running every 5s for 6 minutes.
+        if h >= 14.75 and not _force_closed and cycle > 0:
             open_pos = executor.get_open_positions()
             if open_pos:
-                logger.warning(f"3:45 PM FORCE CLOSE: {len(open_pos)} positions")
+                logger.warning(f"2:45 PM CT FORCE CLOSE: {len(open_pos)} positions")
                 for pos in open_pos:
                     csym = pos.get("contract", "")
                     if not csym:
                         continue
-                    current = get_option_value(client, csym)
-                    if current is not None:
-                        result = executor.close_position(pos["id"], current)
-                    else:
-                        result = executor.close_position(pos["id"], 0.01)
+                    try:
+                        current = get_option_value(client, csym)
+                        result  = executor.close_position(pos["id"], current if current else 0.01)
+                    except Exception as e:
+                        logger.error(f"Force-close error {pos['symbol']}: {e}")
+                        continue
                     if result["status"] == "CLOSED":
                         risk.record_trade(result["pnl"])
                         logger.info(
                             f"FORCE CLOSED: {pos['symbol']} "
                             f"P&L=${result['pnl']:+,.2f}"
                         )
+            _force_closed = True
 
         # ── SESSION BOUNDARY ──
+        # Reset daily flags when outside market hours
+        if h < 8.4:
+            _force_closed = False
         if now.weekday() >= 5 or h < 8.4 or h >= 15.1:
             if h >= 15.1 and cycle > 0:
                 # Safety flush — close any positions still open at session end
@@ -371,22 +465,21 @@ def run():
         t_ctx = time_ctx.get_context(h)
 
         # ── STRATEGY SELECTION ──
+        # Before classification (first ~30 min): use a conservative fixed set.
+        # DO NOT add all strategies unconditionally — the day-type logic exists
+        # precisely to prevent over-trading on QUIET/CHOPPY opens.
         if classified:
             allowed = day_class.get_strategy_for_window(h)
+            # Add breakout and aggressive directional on trending/volatile days
+            if day_class.day_type in ("TRENDING", "VOLATILE"):
+                for s in ["DIRECTIONAL_BUY", "ORB_BREAKOUT"]:
+                    if s not in allowed:
+                        allowed.append(s)
         else:
-            allowed = ["VWAP_PULLBACK", "EMA_MOMENTUM"]
-
-        # Always include core directional strategies once market is open
-        if h >= 8.58 and t_ctx.get("entry_allowed", True):
-            for s in ["VWAP_PULLBACK", "EMA_MOMENTUM", "MOMENTUM_FADE"]:
-                if s not in allowed:
-                    allowed.append(s)
-
-        # Add breakout and aggressive directional on trending/volatile days
-        if day_class.day_type in ("TRENDING", "VOLATILE"):
-            for s in ["DIRECTIONAL_BUY", "ORB_BREAKOUT"]:
-                if s not in allowed:
-                    allowed.append(s)
+            # Pre-classification: only VWAP_PULLBACK; ORB allowed in opening window only
+            allowed = ["VWAP_PULLBACK"]
+            if h < 10.0:
+                allowed.append("ORB_BREAKOUT")
 
         # ── CHECK EXITS ──
         for pos in executor.get_open_positions():
@@ -414,6 +507,10 @@ def run():
         # ── CHECK ENTRY SIGNALS ──
         can_trade, trade_reason = risk.can_trade()
 
+        # Agent override: pause scalper entries
+        if _scalper_paused:
+            can_trade = False
+
         # Hard time gates (belt + suspenders over time_context)
         if h >= 15.5 or h < 8.58:
             can_trade = False
@@ -422,8 +519,17 @@ def run():
         if not t_ctx.get("entry_allowed", True):
             can_trade = False
 
+        # ── PRE-CLASSIFICATION POSITION CAP ──
+        # Before we know the day type, cap at 2 positions max.
+        # This prevents a burst of 5 simultaneous entries at open
+        # before any regime context is established.
+        if not classified and risk.open_positions >= 2:
+            can_trade = False
+
         if can_trade and allowed:
             for sym in SYMBOLS:
+                if sym in _blocked_scalper:
+                    continue
                 snap_5m = data_engine.get_snapshot(sym)
                 snap_1m = data_engine.get_entry_snapshot(sym)
                 if not snap_5m:

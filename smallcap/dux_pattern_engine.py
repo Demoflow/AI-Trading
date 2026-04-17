@@ -320,6 +320,14 @@ def _detect_frd(
     if red["close"] >= prev["open"]:
         return None
 
+    # Intraday HOD requirement: the stock must have made an intraday high
+    # at least 5% above the session open before the FRD signal fires.
+    # Without this, any early-session red candle would qualify even if the
+    # stock never ran — the "latecomers trapped long" thesis requires a prior move.
+    session_open = candles[0]["open"] if candles[0]["open"] > 0 else red["open"]
+    if hod <= session_open * 1.05:
+        return None
+
     # Red body must be significant relative to the prior bar's range
     red_body      = abs(red["open"] - red["close"])
     prior_range   = prev["high"] - prev["low"]
@@ -490,8 +498,11 @@ def _detect_spike_short(
 
     stop = round(current["high"] + 0.02, 2)
 
-    # T1: 50% retrace of the spike from entry toward the base
-    t1 = round(entry - (spike_high - spike_base) * 0.50, 2)
+    # T1: 50% retrace from entry back toward spike_base.
+    # Formula: entry minus half the distance from entry to the base.
+    # Previous formula used (spike_high - spike_base) which measures the full
+    # spike range and often places T1 far below spike_base — incorrect.
+    t1 = round(entry - (entry - spike_base) * 0.50, 2)
     t1 = max(t1, 0.01)
 
     # T2: base of the spike
@@ -598,20 +609,36 @@ def _detect_h_and_s(
         return None
 
     # Neckline: trough between LS and Head (trough_l) and between Head and RS (trough_r)
-    # These are the lows of the candles in those spans.
-    trough_l = min(window[ls_idx:head_idx+1], key=lambda c: c["low"])["low"]
-    trough_r = min(window[head_idx:rs_idx+1],  key=lambda c: c["low"])["low"]
+    # These are the lows of the candles in those spans.  Record their positions too
+    # so we can project the neckline slope forward to the current candle.
+    trough_l_span = window[ls_idx:head_idx+1]
+    trough_r_span = window[head_idx:rs_idx+1]
+    trough_l_local = min(range(len(trough_l_span)), key=lambda i: trough_l_span[i]["low"])
+    trough_r_local = min(range(len(trough_r_span)), key=lambda i: trough_r_span[i]["low"])
+    trough_l_idx_w = ls_idx + trough_l_local    # index within window
+    trough_r_idx_w = head_idx + trough_r_local  # index within window
+    trough_l = trough_l_span[trough_l_local]["low"]
+    trough_r = trough_r_span[trough_r_local]["low"]
 
-    neckline = (trough_l + trough_r) / 2
-
-    # Neckline slope check: the two trough prices must be close to each other.
-    # Slope = relative difference between the two neckline anchor points.
     neckline_mid = (trough_l + trough_r) / 2
     if neckline_mid <= 0:
         return None
+
+    # Neckline slope check: reject if the two anchor points diverge more than allowed
     slope_pct = abs(trough_r - trough_l) / neckline_mid
     if slope_pct > HS_MAX_NECKLINE_SLOPE:
         return None
+
+    # Project neckline slope to the current candle's position.
+    # Using a sloped projection prevents premature breaks on a rising neckline
+    # (a break at the averaged midpoint might be above the actual slope level).
+    current_idx = n - 1
+    span = trough_r_idx_w - trough_l_idx_w
+    if span > 0:
+        slope_per_bar = (trough_r - trough_l) / span
+        neckline = trough_r + slope_per_bar * (current_idx - trough_r_idx_w)
+    else:
+        neckline = neckline_mid
 
     # Signal: current candle closes below neckline (break confirmation)
     current = candles[-1]
@@ -699,6 +726,13 @@ def _detect_dip_panic(
     T2:    50% retrace of the flush move
     """
     if len(candles) < 4:
+        return None
+
+    # Time gate: Dip Panic is an intraday mean-reversion setup.
+    # Too early (< 8:45 AM CT) and the flush is opening volatility, not panic.
+    # After late-entry cutoff (> 10:30 AM CT) the bounce to VWAP is unreliable.
+    now_ct_dp = _hour_ct()
+    if not (8.75 <= now_ct_dp <= 10.5):
         return None
 
     current = candles[-1]   # recovery bar
@@ -797,16 +831,51 @@ def _detect_dip_panic(
 
 # ── ANALYTICS HELPERS ──────────────────────────────────────────────────────────
 
+# Regular session start in CT decimal hours (8:30 AM CT = 9:30 AM ET)
+_MARKET_OPEN_CT = 8.5
+
+
+def _session_candles(candles: list[dict]) -> list[dict]:
+    """
+    Return only candles from the regular session (>= 8:30 AM CT).
+    Filters pre-market candles so VWAP and ORB calculations are session-accurate.
+
+    Handles both Unix-ms timestamps and ISO-string "datetime" / "time" candle keys.
+    Falls back to returning all candles when no timestamp is available.
+    """
+    result = []
+    for c in candles:
+        ts = c.get("datetime") or c.get("time")
+        if ts is None:
+            result.append(c)
+            continue
+        try:
+            if isinstance(ts, (int, float)):
+                dt = datetime.fromtimestamp(ts / 1000 if ts > 1e10 else ts)
+            elif isinstance(ts, str):
+                dt = datetime.fromisoformat(ts)
+            else:
+                result.append(c)
+                continue
+            h = dt.hour + dt.minute / 60.0
+            if h >= _MARKET_OPEN_CT:
+                result.append(c)
+        except Exception:
+            result.append(c)
+    return result if result else candles   # never return empty if input wasn't empty
+
+
 def _calc_vwap(candles: list[dict]) -> float:
     """
-    Compute VWAP from a list of 1-minute candles.
+    Compute VWAP from a list of 1-minute candles (regular session only).
     VWAP = Σ(typical_price × volume) / Σ(volume)
     typical_price = (high + low + close) / 3
     Returns 0.0 if no volume data available.
     """
+    session = _session_candles(candles)
     total_tpv = 0.0
     total_vol = 0.0
-    for c in candles:
+    for c in session:
         vol = c.get("volume") or 0
         if vol <= 0:
             continue

@@ -284,7 +284,12 @@ class TradeExecutor:
         if not tracker.breakeven_set:
             gain_pct = (last - tracker.entry_price) / tracker.entry_price
             if gain_pct >= BREAKEVEN_TRIGGER_PCT:
-                tracker.stop_price = tracker.entry_price + 0.01
+                # Set stop just above entry so that after SELL_SLIPPAGE_PCT is
+                # applied the net sale price still covers entry cost.
+                # stop × (1 - SELL_SLIPPAGE_PCT) >= entry  →  stop >= entry / (1 - slippage)
+                tracker.stop_price = round(
+                    tracker.entry_price / (1 - SELL_SLIPPAGE_PCT), 2
+                )
                 tracker.breakeven_set = True
                 logger.info(
                     f"{sym}: stop moved to breakeven ${tracker.stop_price:.2f} "
@@ -296,9 +301,10 @@ class TradeExecutor:
             shares_to_sell = tracker.shares_total // 3
             if shares_to_sell > 0 and shares_to_sell <= tracker.shares_remaining:
                 self._execute_sell(tracker, shares_to_sell, reason="partial1")
-                # After first partial, move stop to breakeven minimum
+                # After first partial, move stop to slippage-adjusted breakeven
                 if not tracker.breakeven_set:
-                    tracker.stop_price = max(tracker.stop_price, tracker.entry_price)
+                    be_stop = round(tracker.entry_price / (1 - SELL_SLIPPAGE_PCT), 2)
+                    tracker.stop_price = max(tracker.stop_price, be_stop)
                     tracker.breakeven_set = True
                 tracker.partial1_done = True
 
@@ -414,20 +420,43 @@ class TradeExecutor:
         floor_price = round(tracker.entry_price * 0.50, 2)
         limit_price = max(limit_price, floor_price)
 
+        # Urgent exits use IOC — fills immediately at limit or cancels.
+        # Planned partial exits use DAY — price is at our target, no rush.
+        duration = Duration.IMMEDIATE_OR_CANCEL if urgent else Duration.DAY
+
         try:
             order = (
                 equity_sell_limit(sym, shares, str(limit_price))
-                .set_duration(Duration.DAY)
+                .set_duration(duration)
                 .set_session(Session.NORMAL)
                 .build()
             )
             resp = self._client.place_order(self._acct, order)
             if resp.status_code in (200, 201):
+                location = resp.headers.get("Location", "")
+                order_id = location.split("/")[-1] if "/" in location else "unknown"
+
+                # For urgent IOC exits, poll to get the actual fill price.
+                # For planned DAY exits, record the limit price (no need to block on fill).
+                if urgent:
+                    filled_qty, fill_price = self._poll_fill(order_id)
+                    actual_price = fill_price if fill_price > 0 else limit_price
+                    if filled_qty == 0:
+                        logger.warning(
+                            f"SELL ({reason}): {sym} IOC order may not have filled "
+                            f"(order_id={order_id}) — recording limit_price=${limit_price:.2f}"
+                        )
+                    actual_shares = filled_qty if filled_qty > 0 else shares
+                else:
+                    actual_price  = limit_price
+                    actual_shares = shares
+
                 logger.info(
-                    f"SELL ({reason}): {sym} {shares} shares @ ${limit_price:.2f}"
+                    f"SELL ({reason}): {sym} {actual_shares} shares @ ${actual_price:.2f} "
+                    f"(limit=${limit_price:.2f})"
                 )
-                self._risk.record_close(sym, limit_price, shares=shares, reason=reason)
-                tracker.shares_remaining -= shares
+                self._risk.record_close(sym, actual_price, shares=actual_shares, reason=reason)
+                tracker.shares_remaining -= actual_shares
                 if tracker.shares_remaining <= 0:
                     with self._lock:
                         self._positions.pop(sym, None)

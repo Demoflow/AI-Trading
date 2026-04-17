@@ -69,10 +69,15 @@ class TimeContextFilter:
         """
         for start, end, name, boost, allowed, gap_only, desc in _WINDOWS:
             if start <= hour_ct < end:
+                actual_boost = boost
+                # FLAT gap in opening window: price has no directional commitment.
+                # Require +15 more confidence so only very high-conviction setups fire.
+                if name == "opening" and self._gap_direction == "FLAT":
+                    actual_boost += 15
                 return {
                     "window": name,
                     "entry_allowed": allowed,
-                    "min_confidence_boost": boost,
+                    "min_confidence_boost": actual_boost,
                     "gap_aligned_only": gap_only,
                     "gap_direction": self._gap_direction,
                     "description": desc,

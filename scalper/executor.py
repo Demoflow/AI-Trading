@@ -8,6 +8,7 @@ Scalper Executor v3 - Long Options Only.
 
 import os
 import json
+from pathlib import Path
 from datetime import datetime, date
 from loguru import logger
 
@@ -32,6 +33,13 @@ class ScalperExecutor:
                 data["settlement_date"] = date.today().isoformat()
             if "equity" not in data:
                 data["equity"] = self.equity
+            # Back-fill monotonic position ID counter
+            if "next_id" not in data:
+                all_ids = [
+                    p.get("id", 0)
+                    for p in data.get("positions", []) + data.get("history", [])
+                ]
+                data["next_id"] = max(all_ids, default=0) + 1
             return data
         return {
             "equity": self.equity,
@@ -41,12 +49,15 @@ class ScalperExecutor:
             "positions": [],
             "history": [],
             "daily_stats": {},
+            "next_id": 1,
         }
 
     def _save(self):
-        os.makedirs("config", exist_ok=True)
-        with open("config/paper_scalp.json", "w") as f:
-            json.dump(self.portfolio, f, indent=2, default=str)
+        path = Path("config/paper_scalp.json")
+        path.parent.mkdir(exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.portfolio, indent=2, default=str))
+        tmp.replace(path)
 
     # ── SETTLEMENT ─────────────────────────────────────────────────────────────
 
@@ -95,8 +106,14 @@ class ScalperExecutor:
         self.portfolio["cash"] -= cost
         self.portfolio["settled_cash"] -= cost
 
+        # Guard: another signal in the same cycle may have consumed the cash
+        if self.portfolio["settled_cash"] < 0:
+            self.portfolio["cash"] += cost
+            self.portfolio["settled_cash"] += cost
+            return {"status": "REJECTED", "reason": "no_settled_cash"}
+
         pos = {
-            "id": len(self.portfolio["positions"]) + len(self.portfolio["history"]) + 1,
+            "id": self.portfolio["next_id"],
             "symbol": signal["symbol"],
             "direction": signal["direction"],
             "signal_type": signal["type"],
@@ -116,6 +133,7 @@ class ScalperExecutor:
             "peak_value": cost,
             "reason": signal.get("reason", ""),
         }
+        self.portfolio["next_id"] += 1
         self.portfolio["positions"].append(pos)
         self._save()
         logger.info(

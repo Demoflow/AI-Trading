@@ -12,6 +12,16 @@ from datetime import datetime
 from collections import deque
 from loguru import logger
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
 
 class CandleBuilder:
 
@@ -26,7 +36,7 @@ class CandleBuilder:
 
     def add_quote(self, price, volume, timestamp=None):
         if timestamp is None:
-            timestamp = datetime.now()
+            timestamp = _now_ct()
         if price <= 0:
             return None
         block = self._get_block(timestamp)
@@ -85,7 +95,11 @@ class CandleBuilder:
         return result
 
     def seed_candles(self, candles):
-        """Pre-populate with historical OHLCV candles so indicators have data immediately."""
+        """Pre-populate with historical OHLCV candles so indicators have data immediately.
+        Clears existing data first to prevent duplicate candles on reconnect."""
+        self.candles.clear()
+        self._current = None
+        self._current_block = None
         for c in candles:
             self.candles.append(c)
 
@@ -290,7 +304,10 @@ class RealtimeDataEngine:
             for c in raw:
                 try:
                     ts_ms = c.get("datetime", 0)
-                    dt = datetime.fromtimestamp(ts_ms / 1000) if ts_ms else datetime.now()
+                    if ts_ms:
+                        dt = datetime.fromtimestamp(ts_ms / 1000, tz=_CT_TZ) if _CT_TZ else datetime.fromtimestamp(ts_ms / 1000)
+                    else:
+                        dt = _now_ct()
                     result.append({
                         "time": dt,
                         "open": float(c["open"]),
@@ -447,7 +464,7 @@ class RealtimeDataEngine:
         return {
             "symbol": symbol, "price": round(price, 2),
             "session_open": sc[0]["open"] if sc else price,
-            "time": datetime.now(),
+            "time": _now_ct(),
             "candle_count": builder.candle_count(),
             "ema9": ema9, "ema21": ema21, "ema50": ema50,
             "ema9_slope": ema9_slope,

@@ -43,6 +43,7 @@ import json
 import os
 import threading
 from datetime import date, datetime
+from pathlib import Path
 from loguru import logger
 
 from smallcap.dux_config import (
@@ -134,15 +135,6 @@ class DuxRiskManager:
                     f"({self._consecutive_loss} consecutive losses)"
                 )
 
-            # ── Rule 5: Win rate gate ──
-            if self._trades_today >= DUX_MIN_TRADES_FOR_GATE:
-                win_rate = self._wins_today / self._trades_today
-                if win_rate < DUX_WIN_RATE_GATE:
-                    return _deny(
-                        f"win rate {win_rate:.0%} below {DUX_WIN_RATE_GATE:.0%} "
-                        f"({self._wins_today}/{self._trades_today})"
-                    )
-
             # ── Rule 8: Max simultaneous positions ──
             if len(self._positions) >= DUX_MAX_SIMULTANEOUS:
                 return _deny(
@@ -160,6 +152,39 @@ class DuxRiskManager:
                     f"invalid entry/stop: entry=${entry_price:.2f} "
                     f"stop=${stop_price:.2f}"
                 )
+
+            # ── Rule 4: Minimum R:R (compute before win rate gate) ──
+            reward = abs(target1 - entry_price)
+            rr = reward / risk_per_share if risk_per_share > 0 else 0
+            if rr < DUX_MIN_REWARD_RISK:
+                return _deny(
+                    f"R:R {rr:.2f} below minimum {DUX_MIN_REWARD_RISK:.1f} "
+                    f"(entry=${entry_price:.2f} stop=${stop_price:.2f} "
+                    f"t1=${target1:.2f})"
+                )
+
+            # ── Rule 5: Win rate gate ──
+            # Only block if the current win rate is below BOTH the configured gate
+            # AND the breakeven win rate for this specific trade's R:R.
+            # Rationale: a 3:1 trade has positive expected value even at a 25% win
+            # rate — blocking it because we're below 65% is over-conservative.
+            # breakeven_win_rate = 1 / (1 + R:R)
+            if self._trades_today >= DUX_MIN_TRADES_FOR_GATE:
+                win_rate = self._wins_today / self._trades_today
+                breakeven_wr = 1.0 / (1.0 + rr) if rr > 0 else 1.0
+                if win_rate < DUX_WIN_RATE_GATE and win_rate < breakeven_wr:
+                    return _deny(
+                        f"win rate {win_rate:.0%} below breakeven {breakeven_wr:.0%} "
+                        f"for this R:R={rr:.1f} setup "
+                        f"({self._wins_today}/{self._trades_today})"
+                    )
+                elif win_rate < DUX_WIN_RATE_GATE:
+                    # Win rate below gate but trade has positive EV — log a warning
+                    logger.warning(
+                        f"[Dux] {sym}: win rate {win_rate:.0%} below gate "
+                        f"{DUX_WIN_RATE_GATE:.0%} but R:R={rr:.1f} gives positive EV "
+                        f"(breakeven={breakeven_wr:.0%}) — allowing"
+                    )
 
             # Base shares from risk-per-trade cap
             base_shares = int(DUX_MAX_RISK_PER_TRADE / risk_per_share)
@@ -193,16 +218,6 @@ class DuxRiskManager:
                 return _deny(
                     f"dollar risk ${dollar_risk:.2f} exceeds limit "
                     f"${DUX_MAX_RISK_PER_TRADE:.2f}"
-                )
-
-            # ── Rule 4: Minimum R:R ──
-            reward = abs(target1 - entry_price)
-            rr = reward / risk_per_share if risk_per_share > 0 else 0
-            if rr < DUX_MIN_REWARD_RISK:
-                return _deny(
-                    f"R:R {rr:.2f} below minimum {DUX_MIN_REWARD_RISK:.1f} "
-                    f"(entry=${entry_price:.2f} stop=${stop_price:.2f} "
-                    f"t1=${target1:.2f})"
                 )
 
             logger.info(
@@ -406,7 +421,8 @@ class DuxRiskManager:
         self._save_state()
 
     def _save_state(self):
-        os.makedirs(os.path.dirname(DUX_PORTFOLIO_PATH), exist_ok=True)
+        path = Path(DUX_PORTFOLIO_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             state = {
                 "date":             self._session_date.isoformat(),
@@ -417,11 +433,13 @@ class DuxRiskManager:
                 "daily_halted":     self._daily_halted,
                 "error_mode":       self._error_mode,
                 "positions":        self._positions,
+                "position_pnl":     self._position_pnl,
                 "closed_trades":    self._closed_trades,
             }
         try:
-            with open(DUX_PORTFOLIO_PATH, "w") as f:
-                json.dump(state, f, indent=2)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            tmp.replace(path)   # atomic rename — no half-written file on crash
         except OSError as e:
             logger.warning(f"[Dux] Could not save portfolio state: {e}")
 
@@ -443,6 +461,7 @@ class DuxRiskManager:
                 self._daily_halted     = state.get("daily_halted", False)
                 self._error_mode       = state.get("error_mode", 0)
                 self._positions        = state.get("positions", {})
+                self._position_pnl     = state.get("position_pnl", {})
                 self._closed_trades    = state.get("closed_trades", [])
             logger.info(
                 f"[Dux] Risk manager: loaded today's state | "

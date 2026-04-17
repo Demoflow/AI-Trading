@@ -8,8 +8,23 @@ Scalper Risk Manager v5 - Long Options Only.
 """
 
 import os
+import json
+from pathlib import Path
 from datetime import datetime, date
 from loguru import logger
+
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+_RISK_STATE_PATH = "config/scalper_risk_state.json"
+
+
+def _hour_ct() -> float:
+    n = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+    return n.hour + n.minute / 60.0 + n.second / 3600.0
 
 FOMC_DATES = [
     "2026-01-29", "2026-03-18", "2026-05-06",
@@ -32,20 +47,21 @@ class ScalperRiskManager:
     MAX_OPEN_POSITIONS = 5   # Default; overridden by day type + GEX via get_max_positions()
 
     # Day-type / GEX aware position caps
+    # QUIET/CHOPPY + POSITIVE GEX: market is pinned — one position at a time.
     _POS_CAP = {
-        ("QUIET",    "POSITIVE"): 2,
-        ("CHOPPY",   "POSITIVE"): 2,
-        ("QUIET",    "NEGATIVE"): 3,
-        ("QUIET",    "NEUTRAL"):  3,
-        ("CHOPPY",   "NEGATIVE"): 3,
-        ("CHOPPY",   "NEUTRAL"):  3,
+        ("QUIET",    "POSITIVE"): 1,
+        ("CHOPPY",   "POSITIVE"): 1,
+        ("QUIET",    "NEGATIVE"): 2,
+        ("QUIET",    "NEUTRAL"):  2,
+        ("CHOPPY",   "NEGATIVE"): 2,
+        ("CHOPPY",   "NEUTRAL"):  2,
     }
     # Default for TRENDING / VOLATILE (or any combo not listed above) = 5
 
     # Minimum confidence overrides by day type
     _MIN_CONF = {
         "QUIET":   85,
-        "CHOPPY":  82,
+        "CHOPPY":  75,
     }
     MIN_CONF_DEFAULT = 70
 
@@ -67,13 +83,55 @@ class ScalperRiskManager:
         self._trade_date = date.today()
         self.day_type = ""       # Set by main loop after classification
         self.gex_regime = ""     # Set by main loop after GEX update
+        self._consecutive_losses = 0  # Reset to 0 on any winning trade
+        self._load_state()
+
+    def _load_state(self):
+        """Restore in-memory risk state from disk (survives process restarts)."""
+        try:
+            if os.path.exists(_RISK_STATE_PATH):
+                with open(_RISK_STATE_PATH) as f:
+                    s = json.load(f)
+                if s.get("date") == date.today().isoformat():
+                    self.trades_today        = s.get("trades_today", 0)
+                    self.daily_pnl           = s.get("daily_pnl", 0.0)
+                    self._consecutive_losses = s.get("consecutive_losses", 0)
+                    self.shutdown            = s.get("shutdown", False)
+                    logger.info(
+                        f"Risk state restored: trades={self.trades_today} "
+                        f"pnl=${self.daily_pnl:+,.2f} "
+                        f"streak={self._consecutive_losses} "
+                        f"shutdown={self.shutdown}"
+                    )
+        except Exception as e:
+            logger.warning(f"Risk state load failed (starting fresh): {e}")
+
+    def _save_state(self):
+        """Persist in-memory risk state to disk atomically."""
+        try:
+            state = {
+                "date":               self._trade_date.isoformat(),
+                "trades_today":       self.trades_today,
+                "daily_pnl":          self.daily_pnl,
+                "consecutive_losses": self._consecutive_losses,
+                "shutdown":           self.shutdown,
+            }
+            path = Path(_RISK_STATE_PATH)
+            path.parent.mkdir(exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2))
+            tmp.replace(path)
+        except Exception as e:
+            logger.warning(f"Risk state save failed: {e}")
 
     def _reset_if_new_day(self):
         if date.today() != self._trade_date:
             self.trades_today = 0
             self.daily_pnl = 0
             self.shutdown = False
+            self._consecutive_losses = 0
             self._trade_date = date.today()
+            self._save_state()
 
     def is_event_day(self):
         today = date.today().isoformat()
@@ -88,10 +146,10 @@ class ScalperRiskManager:
 
     def is_trading_window(self):
         self._reset_if_new_day()
-        now = datetime.now()
+        now = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
         if now.weekday() >= 5:
             return False, "weekend"
-        h = now.hour + now.minute / 60.0
+        h = _hour_ct()
         is_event, etype = self.is_event_day()
         if is_event and h < 9.5:
             return False, f"wait_{etype}"
@@ -110,8 +168,18 @@ class ScalperRiskManager:
             return False, "shutdown"
         if self.daily_pnl <= -(self.equity * self.MAX_DAILY_LOSS_PCT):
             self.shutdown = True
+            self._save_state()
             logger.warning(f"DAILY LOSS: ${self.daily_pnl:+,.2f}")
             return False, "max_loss"
+        # Consecutive loss circuit breaker: 5 straight losses → sit out the rest of the session
+        if self._consecutive_losses >= 5:
+            self.shutdown = True
+            self._save_state()
+            logger.warning(
+                f"CONSECUTIVE LOSS LIMIT: {self._consecutive_losses} straight losses — "
+                f"sitting out rest of session to prevent runaway drawdown"
+            )
+            return False, "consec_loss_limit"
         cap = self.get_max_positions(self.day_type, self.gex_regime)
         if self.open_positions >= cap:
             return False, f"max_open({cap})"
@@ -130,8 +198,16 @@ class ScalperRiskManager:
         return self._POS_CAP.get((day_type, gex_regime), self.MAX_OPEN_POSITIONS)
 
     def get_min_confidence(self, day_type=""):
-        """Return minimum signal confidence based on day classification."""
-        return self._MIN_CONF.get(day_type, self.MIN_CONF_DEFAULT)
+        """Return minimum signal confidence based on day classification and streak."""
+        base = self._MIN_CONF.get(day_type, self.MIN_CONF_DEFAULT)
+        # Raise the bar after 3 consecutive losses — only exceptional setups qualify
+        if self._consecutive_losses >= 3:
+            base += 15
+            logger.debug(
+                f"Consecutive loss boost active ({self._consecutive_losses} in a row): "
+                f"min_conf now {base}"
+            )
+        return base
 
     def get_position_size(self, conf):
         base = self.equity * self.MAX_RISK_PER_TRADE
@@ -146,6 +222,18 @@ class ScalperRiskManager:
     def record_trade(self, pnl=0):
         self.trades_today += 1
         self.daily_pnl += pnl
+        if pnl < 0:
+            self._consecutive_losses += 1
+            if self._consecutive_losses >= 3:
+                logger.warning(
+                    f"Streak: {self._consecutive_losses} consecutive losses "
+                    f"(${pnl:+,.2f}) — raising min confidence"
+                )
+        else:
+            if self._consecutive_losses > 0:
+                logger.info(f"Streak broken after {self._consecutive_losses} losses")
+            self._consecutive_losses = 0
+        self._save_state()
 
     def check_exit(self, position, current_value):
         """
@@ -162,7 +250,7 @@ class ScalperRiskManager:
         All windows target ~2.5:1 R:R (profit / stop).
         Stops tighten as theta decay accelerates through the day.
         """
-        h = datetime.now().hour + datetime.now().minute / 60.0
+        h = _hour_ct()
         #                    profit  stop  trail_start  trail_pct  be_trigger  max_hold
         if h < 10.0:       # Opening — wider gamma range, 30 min hold OK
             return          0.50,   0.20,   0.12,        0.10,      0.20,       30
@@ -227,7 +315,7 @@ class ScalperRiskManager:
                 return True, f"time_{mins:.0f}min", None
 
         # 6. Closing gate — align with EOD force-close at 2:45 PM CT
-        h = datetime.now().hour + datetime.now().minute / 60.0
+        h = _hour_ct()
         if h >= 14.75:
             return True, "closing", None
 

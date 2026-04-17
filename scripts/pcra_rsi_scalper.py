@@ -41,6 +41,17 @@ import time
 
 from datetime import datetime, date
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _hour_ct() -> float:
+    n = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+    return n.hour + n.minute / 60.0 + n.second / 3600.0
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from loguru import logger
@@ -185,11 +196,11 @@ def detect_market_trend(client):
             period_type=SC.PriceHistory.PeriodType.MONTH,
             period=SC.PriceHistory.Period.ONE_MONTH,
             frequency_type=SC.PriceHistory.FrequencyType.DAILY,
-            frequency=SC.PriceHistory.Frequency.EVERY_MINUTE,  # daily bars
+            frequency=SC.PriceHistory.Frequency.DAILY,
         )
         if resp.status_code == 200:
             candles = resp.json().get("candles", [])
-            closes  = [c["close"] for c in candles if "close" in c]
+            closes  = [c["close"] for c in candles if "close" in c]  # noqa: E741
             if len(closes) >= SMA_DAYS:
                 sma20     = sum(closes[-SMA_DAYS:]) / SMA_DAYS
                 spy_price = closes[-1]
@@ -282,15 +293,20 @@ def sell_market(client, ah, symbol, shares):
 def load_state():
     try:
         if os.path.exists(STATE_FILE):
-            return json.load(open(STATE_FILE))
-    except Exception:
-        pass
+            with open(STATE_FILE) as f:
+                return json.load(f)
+    except Exception as e:
+        logger.warning(f"State file load failed, starting fresh: {e}")
     return {"last_trade_date": "", "trades_today": 0, "history": []}
 
 
 def save_state(state):
-    os.makedirs("config", exist_ok=True)
-    json.dump(state, open(STATE_FILE, "w"), indent=2, default=str)
+    from pathlib import Path
+    path = Path(STATE_FILE)
+    path.parent.mkdir(exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2, default=str))
+    tmp.replace(path)
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
@@ -362,8 +378,8 @@ def run(paper=True, force_ticker=None):
                 f"(~{(RSI_PERIOD+1)*BAR_MINUTES} min from open)")
 
     while True:
-        now     = datetime.now()
-        hour_ct = now.hour + now.minute / 60.0
+        now     = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+        hour_ct = _hour_ct()
         cycle  += 1
 
         # Session end

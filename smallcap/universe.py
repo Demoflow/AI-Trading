@@ -200,9 +200,18 @@ class UniverseManager:
                 continue
 
             avg_vol = self._avg_vol_cache.get(sym, 0)
-            rel_vol = (volume / avg_vol) if avg_vol > 0 else 0
-            if avg_vol > 0 and rel_vol < MIN_REL_VOLUME:
-                continue
+            if avg_vol > 0:
+                rel_vol = volume / avg_vol
+                if rel_vol < MIN_REL_VOLUME:
+                    continue
+            else:
+                # avg_vol unknown (e.g. newly discovered symbol with no history).
+                # Require at least 3× MIN_PREMARKET_VOL as a proxy for genuine
+                # unusual activity — prevents thinly traded unknowns from flooding
+                # the candidates list when relative volume can't be computed.
+                rel_vol = 0
+                if volume < MIN_PREMARKET_VOL * 3:
+                    continue
 
             # ── Float filter ──
             float_shares = self.get_float(sym)
@@ -232,8 +241,20 @@ class UniverseManager:
             # gap 15%: normalize across useful range [MIN_GAP_PCT, 100%]
             gap_norm = min(1.0, max(0.0, (gap_pct - MIN_GAP_PCT) / (100.0 - MIN_GAP_PCT)))
 
-            # float bonus 10%: binary — under preferred float is best
-            float_bonus = 1.0 if float_shares and float_shares < PREFERRED_FLOAT else 0.0
+            # float bonus 10%: gradient — smallest float scores highest.
+            # 0→PREFERRED_FLOAT  → 1.0 (full bonus)
+            # PREFERRED_FLOAT→MAX_FLOAT → 0.5→0.0 (partial bonus, decaying linearly)
+            # float unknown → 0.3 (neutral, slight positive bias for new discoveries)
+            if float_shares:
+                if float_shares <= PREFERRED_FLOAT:
+                    float_bonus = 1.0
+                elif float_shares <= MAX_FLOAT:
+                    float_bonus = 0.5 * (1.0 - (float_shares - PREFERRED_FLOAT) /
+                                         (MAX_FLOAT - PREFERRED_FLOAT))
+                else:
+                    float_bonus = 0.0
+            else:
+                float_bonus = 0.3  # unknown float: neutral, not penalized
 
             rank = (
                 cat_norm   * 0.40 +

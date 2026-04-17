@@ -23,6 +23,12 @@ import json
 import time
 from datetime import datetime
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None   # fallback — assumes system clock is already in CT
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from loguru import logger
@@ -48,13 +54,47 @@ from smallcap.executor import TradeExecutor
 from smallcap.dux_pattern_engine import DuxPatternEngine
 from smallcap.dux_risk_manager import DuxRiskManager
 from smallcap.dux_executor import DuxExecutor
-from smallcap.dux_config import DUX_START_CT, DUX_LATE_ENTRY_CUTOFF_CT
+from smallcap.dux_config import DUX_START_CT, DUX_LATE_ENTRY_CUTOFF_CT, DUX_MAX_DAILY_LOSS
 from smallcap.market_character import analyze_market_character
 
 
 def _hour_ct() -> float:
-    n = datetime.now()
+    """Return current time as decimal CT hours, timezone-aware."""
+    if _CT_TZ:
+        n = datetime.now(tz=_CT_TZ)
+    else:
+        n = datetime.now()
     return n.hour + n.minute / 60.0 + n.second / 3600.0
+
+
+# ── Agent override helpers ─────────────────────────────────────────────────────
+_OVERRIDES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "config", "agent_overrides.json"
+)
+_overrides_mtime: float = 0.0
+_overrides_cache: dict = {}
+
+
+def _load_overrides() -> dict:
+    global _overrides_mtime, _overrides_cache
+    try:
+        mtime = os.path.getmtime(_OVERRIDES_PATH)
+        if mtime != _overrides_mtime:
+            with open(_OVERRIDES_PATH, "r") as f:
+                _overrides_cache = json.load(f)
+            _overrides_mtime = mtime
+    except Exception:
+        pass
+    return _overrides_cache
+
+
+def _save_overrides(data: dict):
+    try:
+        with open(_OVERRIDES_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 
 def run():
@@ -182,7 +222,15 @@ def run():
                     f"{MARKET_OPEN - h:.2f}h until open"
                 )
 
-            time.sleep(PREMARKET_SCAN_INTERVAL_SEC)
+            # Taper scan interval as market open approaches:
+            # > 30 min away → 60s, 15–30 min → 30s, < 15 min → 15s
+            minutes_to_open = (MARKET_OPEN - _hour_ct()) * 60
+            if minutes_to_open > 30:
+                time.sleep(60)
+            elif minutes_to_open > 15:
+                time.sleep(30)
+            else:
+                time.sleep(15)
 
     # ── MARKET HOURS PHASE ─────────────────────────────────────────────────────
     logger.info("─" * 65)
@@ -253,13 +301,23 @@ def run():
         dux_exec = DuxExecutor(client, account_hash, dux_risk, stream)
         logger.info("Dux executor ready")
 
+    # Combined daily loss limit: if both strategies together exceed this,
+    # halt both regardless of individual limits.
+    # Ross max = $500 + Dux max = $750 = $1,250 unconstrained.  A combined
+    # hard stop of $750 prevents one strategy from subsidising the other.
+    _COMBINED_DAILY_LOSS_LIMIT = MAX_DAILY_LOSS + DUX_MAX_DAILY_LOSS * 0.5  # $875
+
     # ── MARKET HOURS MAIN LOOP ─────────────────────────────────────────────────
-    _last_log_minute     = -1
-    _last_screener_check = 0.0   # monotonic timestamp
-    _last_watchdog_check = 0.0
-    _SCREENER_CHECK_INTERVAL = 30   # check screener hits every 30s
-    _WATCHDOG_CHECK_INTERVAL = 60   # check stream health every 60s
-    _STREAM_STALE_SEC        = 90   # alert if no L1 message for this long
+    _last_log_minute          = -1
+    _last_screener_check      = 0.0   # monotonic timestamp
+    _last_watchdog_check      = 0.0
+    _last_market_char_refresh = 0.0   # market character (VIX/SPY) refresh
+    _last_zero_cand_scan      = 0.0   # zero-candidate recovery rescan
+    _SCREENER_CHECK_INTERVAL  = 30    # check screener hits every 30s
+    _WATCHDOG_CHECK_INTERVAL  = 60    # check stream health every 60s
+    _STREAM_STALE_SEC         = 90    # alert if no L1 message for this long
+    _MARKET_CHAR_INTERVAL     = 1800  # refresh VIX/SPY regime every 30 min
+    _ZERO_CAND_SCAN_INTERVAL  = 120   # re-scan for candidates every 2 min if none found
 
     try:
         while _hour_ct() < EOD_FLATTEN:
@@ -268,6 +326,26 @@ def run():
             current_minute = now.hour * 60 + now.minute
 
             try:
+                # ── Agent override check ───────────────────────────────────────
+                _ov = _load_overrides()
+
+                if _ov.get("flatten_all"):
+                    logger.warning("[Agent] FLATTEN ALL received — flattening all positions")
+                    if executor:
+                        executor.flatten_all(reason="agent_flatten")
+                    if dux_exec:
+                        dux_exec.flatten_all(reason="agent_flatten")
+                    _ov["flatten_all"] = False
+                    _save_overrides(_ov)
+
+                _smallcap_paused = _ov.get("smallcap_paused", False)
+                _blocked_syms    = set(s.upper() for s in _ov.get("blocked_symbols", []))
+                _ofe_ov          = _ov.get("ofe_override")
+                _raw_ofe         = _ofe_ov if _ofe_ov is not None else ofe_threshold
+                # Clamp override to sane range: floor 40 (minimum edge filter),
+                # ceiling 85 (above this almost no trades would pass).
+                _eff_ofe         = max(40, min(85, _raw_ofe))
+
                 # ── Position management — every tick ──────────────────────────
                 if executor:
                     executor.manage_positions()
@@ -315,24 +393,113 @@ def run():
                     elif not stream.is_connected():
                         logger.warning("STREAM WATCHDOG: stream shows disconnected — reconnecting")
 
+                # ── Combined daily loss limit ─────────────────────────────────
+                combined_pnl = risk_mgr.get_daily_pnl() + dux_risk.get_daily_pnl()
+                if combined_pnl <= -_COMBINED_DAILY_LOSS_LIMIT:
+                    logger.warning(
+                        f"COMBINED DAILY LOSS LIMIT HIT "
+                        f"(combined P&L=${combined_pnl:+.2f} ≤ "
+                        f"-${_COMBINED_DAILY_LOSS_LIMIT:.0f}) — "
+                        f"flattening all positions and halting both strategies"
+                    )
+                    if executor:
+                        executor.flatten_all(reason="combined_loss_limit")
+                    if dux_exec:
+                        dux_exec.flatten_all(reason="combined_loss_limit")
+                    break
+
+                # ── Mid-session market character refresh (VIX/SPY) ───────────
+                # Re-assess regime every 30 minutes so a sudden market reversal
+                # (e.g. Fed announcement, major macro news) tightens the OFE gate.
+                if _now_mono - _last_market_char_refresh >= _MARKET_CHAR_INTERVAL:
+                    _last_market_char_refresh = _now_mono
+                    try:
+                        market = analyze_market_character(client)
+                        ofe_threshold = market.ofe_threshold
+                        logger.info(
+                            f"[MarketChar refresh] {market.regime.upper()} | "
+                            f"OFE threshold → {ofe_threshold} | {market.note}"
+                        )
+                    except Exception as _mc_err:
+                        logger.warning(
+                            f"Market character refresh failed (using last value "
+                            f"{ofe_threshold}): {_mc_err}"
+                        )
+
+                # ── Zero-candidate recovery rescan ────────────────────────────
+                # If streaming never started (no gap candidates at open) or
+                # the candidate list is thin, periodically re-scan for late
+                # breakouts so the session isn't silently idle.
+                if (h <= LATE_ENTRY_CUTOFF
+                        and _now_mono - _last_zero_cand_scan >= _ZERO_CAND_SCAN_INTERVAL
+                        and account_id):
+                    _last_zero_cand_scan = _now_mono
+                    late_cands = scanner.scan(catalyst_scores=catalyst.get_scores())
+                    for c in late_cands:
+                        sym = c["symbol"]
+                        if sym not in candidate_symbols:
+                            candidate_symbols.append(sym)
+                            if stream is None and account_id:
+                                # First candidate discovered after open — start streaming
+                                stream = StreamManager(client, account_id)
+                                stream.start([sym])
+                                ofe = OrderFlowEngine(stream)
+                                ofe.start()
+                                pe = PatternEngine(stream)
+                                pe.start()
+                                dux_pe = DuxPatternEngine(stream)
+                                dux_pe.start()
+                                if account_hash:
+                                    executor = TradeExecutor(client, account_hash, risk_mgr, stream)
+                                    dux_exec = DuxExecutor(client, account_hash, dux_risk, stream)
+                                logger.info(
+                                    f"Zero-candidate recovery: started streaming for {sym}"
+                                )
+                            elif stream:
+                                stream.subscribe_symbols([sym])
+                            if ofe:
+                                ofe.start_watching(sym, resistance=c.get("prior_close", c["price"]) * 1.05)
+                            if pe:
+                                pe.watch(sym)
+                            if dux_pe:
+                                dux_pe.watch(sym)
+                                dux_pe.set_candidate_meta(sym, {
+                                    "prev_day_change_pct": c.get("prev_day_change_pct", 0),
+                                    "prior_close":         c.get("prior_close", 0),
+                                    "premarket_vol":       c.get("volume", 0),
+                                    "float":               c.get("float"),
+                                })
+                            logger.info(
+                                f"Late breakout scan → new candidate: {sym} "
+                                f"gap={c['gap_pct']:+.1f}% @ ${c['price']:.2f}"
+                            )
+
                 # ── Ross entry signals ────────────────────────────────────────
-                if executor and pe and ofe and h <= LATE_ENTRY_CUTOFF and not risk_mgr.get_status()["daily_halted"]:
+                if (not _smallcap_paused
+                        and executor and pe and ofe
+                        and h <= LATE_ENTRY_CUTOFF
+                        and not risk_mgr.get_status()["daily_halted"]):
                     for sym, signals in pe.get_all_signals().items():
+                        if sym in _blocked_syms:
+                            continue
                         for sig in signals:
                             if _has_conflict(sym, risk_mgr, dux_risk):
                                 logger.debug(f"Ross blocked {sym}: Dux holds position")
                                 continue
                             score_dict = ofe.get_score(sym)
                             ofe_score  = score_dict["composite"] if score_dict else 0
-                            if ofe_score >= ofe_threshold:
+                            if ofe_score >= _eff_ofe:
                                 executor.enter(sig, ofe_score)
                                 break
 
                 # ── Dux entry signals ─────────────────────────────────────────
-                if (dux_exec and dux_pe
+                if (not _smallcap_paused
+                        and dux_exec and dux_pe
                         and DUX_START_CT <= h <= DUX_LATE_ENTRY_CUTOFF_CT
                         and not dux_risk.is_halted()):
                     for sym, signals in dux_pe.get_all_signals().items():
+                        if sym in _blocked_syms:
+                            continue
                         for sig in signals:
                             if _has_conflict(sym, risk_mgr, dux_risk):
                                 logger.debug(f"[Dux] Blocked {sym}: Ross holds position")

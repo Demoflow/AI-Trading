@@ -41,7 +41,7 @@ from loguru import logger
 from smallcap.config import (
     MIN_CONSOL_BARS, MAX_CONSOL_BARS, MAX_CONSOL_RANGE_PCT,
     MIN_BREAKOUT_VOL_MULT, PARTIAL_1_TARGET_PCT, PARTIAL_2_TARGET_PCT,
-    PATTERN_SCAN_INTERVAL_SEC,
+    PATTERN_SCAN_INTERVAL_SEC, MARKET_OPEN,
 )
 
 # ── CONSTANTS ──────────────────────────────────────────────────────────────────
@@ -58,8 +58,9 @@ _THRUST_MIN_BODY_MULT = 2.0
 # Lookback for average candle range (used for thrust quality check)
 _AVG_RANGE_LOOKBACK = 10
 
-# How long a signal stays "active" before expiring (minutes)
-_SIGNAL_EXPIRY_MIN = 5
+# How long a signal stays "active" before expiring (minutes).
+# 3 minutes matches Dux engine and prevents acting on stale momentum signals.
+_SIGNAL_EXPIRY_MIN = 3
 
 
 @dataclass
@@ -389,18 +390,20 @@ def _detect_orb(sym: str, candles: list[dict]) -> PatternSignal | None:
     """
     Opening Range Breakout: First 5-minute candles define the OR.
     Entry on break above OR high with confirming volume.
+    Uses session-only candles so pre-market bars don't corrupt the opening range.
     """
-    if len(candles) < _ORB_MINUTES + 1:
+    session = _session_candles(candles)
+    if len(session) < _ORB_MINUTES + 1:
         return None
 
-    # Opening range = first _ORB_MINUTES candles
-    or_candles = candles[:_ORB_MINUTES]
+    # Opening range = first _ORB_MINUTES regular-session candles
+    or_candles = session[:_ORB_MINUTES]
     or_high = max(c["high"]   for c in or_candles)
     or_low  = min(c["low"]    for c in or_candles)
     or_avg_vol = sum(c["volume"] for c in or_candles) / _ORB_MINUTES
 
     # Current (or most recent) candle breaking above OR high
-    current = candles[-1]
+    current = session[-1]
     if current["close"] <= or_high:
         return None
 
@@ -409,7 +412,7 @@ def _detect_orb(sym: str, candles: list[dict]) -> PatternSignal | None:
         return None
 
     # Don't signal if we're more than 15 candles past the OR (too late)
-    candles_since_or = len(candles) - _ORB_MINUTES
+    candles_since_or = len(session) - _ORB_MINUTES
     if candles_since_or > 15:
         return None
 
@@ -438,15 +441,44 @@ def _detect_orb(sym: str, candles: list[dict]) -> PatternSignal | None:
     )
 
 
+def _session_candles(candles: list[dict]) -> list[dict]:
+    """
+    Return only regular-session candles (>= MARKET_OPEN in CT decimal hours).
+    Filters pre-market candles from VWAP and ORB calculations.
+    Falls back to all candles when no timestamp is present.
+    """
+    result = []
+    for c in candles:
+        ts = c.get("datetime") or c.get("time")
+        if ts is None:
+            result.append(c)
+            continue
+        try:
+            if isinstance(ts, (int, float)):
+                dt = datetime.fromtimestamp(ts / 1000 if ts > 1e10 else ts)
+            elif isinstance(ts, str):
+                dt = datetime.fromisoformat(ts)
+            else:
+                result.append(c)
+                continue
+            h = dt.hour + dt.minute / 60.0
+            if h >= MARKET_OPEN:
+                result.append(c)
+        except Exception:
+            result.append(c)
+    return result if result else candles
+
+
 def _calc_vwap(candles: list[dict]) -> float:
     """
-    Calculate VWAP from a list of OHLCV candles.
+    Calculate VWAP from a list of OHLCV candles (regular session only).
     VWAP = Σ(typical_price × volume) / Σ(volume)
     typical_price = (high + low + close) / 3
     """
+    session = _session_candles(candles)
     cum_pv = 0.0
     cum_v  = 0.0
-    for c in candles:
+    for c in session:
         h = c.get("high", 0) or 0
         l = c.get("low",  0) or 0
         cl= c.get("close",0) or 0

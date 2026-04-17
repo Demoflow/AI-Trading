@@ -48,7 +48,6 @@ except ImportError:
     logger.warning("schwab.orders not importable — Dux executor will paper-simulate all orders")
 
 import time as _time
-import time as _time_std
 
 from smallcap.config import (
     ORDER_TTF_TIMEOUT_SEC,
@@ -354,7 +353,12 @@ class DuxExecutor:
         if not tracker.breakeven_set:
             gain_pct = (tracker.entry_price - last) / tracker.entry_price
             if gain_pct >= DUX_BREAKEVEN_TRIGGER:
-                tracker.stop_price = tracker.entry_price - 0.01
+                # For a short, covering at entry × (1 + DUX_COVER_SLIPPAGE_PCT) costs
+                # more than entry.  Set stop so that after cover slippage the net P&L >= 0.
+                # stop × (1 + DUX_COVER_SLIPPAGE_PCT) <= entry  →  stop = entry / (1 + slippage)
+                tracker.stop_price = round(
+                    tracker.entry_price / (1 + DUX_COVER_SLIPPAGE_PCT), 2
+                )
                 tracker.breakeven_set = True
                 logger.info(
                     f"[DuxExec] {sym} SHORT: stop moved to breakeven "
@@ -400,7 +404,11 @@ class DuxExecutor:
         if not tracker.breakeven_set:
             gain_pct = (last - tracker.entry_price) / tracker.entry_price
             if gain_pct >= DUX_BREAKEVEN_TRIGGER:
-                tracker.stop_price = tracker.entry_price + 0.01
+                # Set stop so that after DUX_COVER_SLIPPAGE_PCT the net P&L >= 0.
+                # stop × (1 - DUX_COVER_SLIPPAGE_PCT) >= entry  →  stop = entry / (1 - slippage)
+                tracker.stop_price = round(
+                    tracker.entry_price / (1 - DUX_COVER_SLIPPAGE_PCT), 2
+                )
                 tracker.breakeven_set = True
                 logger.info(
                     f"[DuxExec] {sym} LONG: stop moved to breakeven "
@@ -544,9 +552,9 @@ class DuxExecutor:
         """Poll Schwab order status until IOC resolves. Returns (filled_qty, avg_price)."""
         if order_id in (None, "unknown", "PAPER"):
             return 0, 0.0
-        deadline = _time_std.time() + ORDER_TTF_TIMEOUT_SEC
-        while _time_std.time() < deadline:
-            _time_std.sleep(0.5)
+        deadline = _time.time() + ORDER_TTF_TIMEOUT_SEC
+        while _time.time() < deadline:
+            _time.sleep(0.5)
             try:
                 resp = self._client.get_order(order_id, self._acct)
                 if resp.status_code == 200:
@@ -594,23 +602,39 @@ class DuxExecutor:
             limit_price = max(limit_price, round(tracker.entry_price * 0.50, 2))
             instruction = "SELL"
 
-        order_id = self._place_exit_order(sym, shares, limit_price, instruction)
+        order_id = self._place_exit_order(sym, shares, limit_price, instruction, urgent=urgent)
 
         if order_id is not None or self._paper:
             log_tag = "[PAPER]" if self._paper else ""
+
+            # For urgent IOC exits, poll to confirm fill and capture actual price.
+            # For planned DAY exits at target, record the limit price directly.
+            if urgent and not self._paper and order_id not in (None, "PAPER"):
+                filled_qty, fill_price = self._poll_fill(order_id)
+                actual_price  = fill_price if fill_price > 0 else limit_price
+                actual_shares = filled_qty if filled_qty > 0 else shares
+                if filled_qty == 0:
+                    logger.warning(
+                        f"[DuxExec] EXIT ({reason}): {sym} IOC order may not have filled "
+                        f"(order_id={order_id}) — recording limit_price=${limit_price:.2f}"
+                    )
+            else:
+                actual_price  = limit_price
+                actual_shares = shares
+
             logger.info(
                 f"[DuxExec]{log_tag} EXIT ({reason}): {sym} {instruction} "
-                f"{shares} shares @ ${limit_price:.2f} "
-                f"(entry=${tracker.entry_price:.2f})"
+                f"{actual_shares} shares @ ${actual_price:.2f} "
+                f"(limit=${limit_price:.2f} entry=${tracker.entry_price:.2f})"
             )
             self._risk.record_close(
                 symbol=sym,
-                close_price=limit_price,
-                shares=shares,
+                close_price=actual_price,
+                shares=actual_shares,
                 reason=reason,
                 expected_risk=tracker.expected_risk,
             )
-            tracker.shares_remaining -= shares
+            tracker.shares_remaining -= actual_shares
             if tracker.shares_remaining <= 0:
                 with self._lock:
                     self._positions.pop(sym, None)
@@ -625,13 +649,20 @@ class DuxExecutor:
         shares:      int,
         limit_price: float,
         instruction: str,      # "BUY_TO_COVER" | "SELL"
+        urgent:      bool = False,
     ) -> str | None:
-        """Place a BUY_TO_COVER or SELL limit order. Returns order_id or None."""
+        """
+        Place a BUY_TO_COVER or SELL limit order. Returns order_id or None.
+        Urgent exits (stop/halt/EOD) use IOC so the order resolves immediately.
+        Planned exits (partial at T1) use DAY duration.
+        """
         if self._paper:
             return "PAPER"
 
         if not _SCHWAB_ORDERS_AVAILABLE:
             return None
+
+        duration = Duration.IMMEDIATE_OR_CANCEL if urgent else Duration.DAY
 
         try:
             instr = (
@@ -643,7 +674,7 @@ class DuxExecutor:
                 .set_order_type(OrderType.LIMIT)
                 .set_price(round(limit_price, 2))
                 .set_session(Session.NORMAL)
-                .set_duration(Duration.DAY)
+                .set_duration(duration)
                 .set_order_strategy_type(OrderStrategyType.SINGLE)
                 .add_equity_leg(instr, symbol, shares)
                 .build()

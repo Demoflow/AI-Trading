@@ -40,6 +40,7 @@ import json
 import os
 import threading
 from datetime import date, datetime
+from pathlib import Path
 from loguru import logger
 
 from smallcap.config import (
@@ -334,7 +335,8 @@ class SmallCapRiskManager:
         self._save_state()
 
     def _save_state(self):
-        os.makedirs(os.path.dirname(PORTFOLIO_PATH), exist_ok=True)
+        path = Path(PORTFOLIO_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             state = {
                 "date":             self._session_date.isoformat(),
@@ -343,11 +345,13 @@ class SmallCapRiskManager:
                 "trades_today":     self._trades_today,
                 "daily_halted":     self._daily_halted,
                 "positions":        self._positions,
+                "position_pnl":     self._position_pnl,
                 "closed_trades":    self._closed_trades,
             }
         try:
-            with open(PORTFOLIO_PATH, "w") as f:
-                json.dump(state, f, indent=2)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            tmp.replace(path)   # atomic rename — no half-written file on crash
         except OSError as e:
             logger.warning(f"Could not save portfolio state: {e}")
 
@@ -367,6 +371,7 @@ class SmallCapRiskManager:
                 self._trades_today     = state.get("trades_today", 0)
                 self._daily_halted     = state.get("daily_halted", False)
                 self._positions        = state.get("positions", {})
+                self._position_pnl     = state.get("position_pnl", {})
                 self._closed_trades    = state.get("closed_trades", [])
             logger.info(
                 f"Risk manager: loaded today's state | "

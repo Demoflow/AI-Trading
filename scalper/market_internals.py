@@ -18,6 +18,16 @@ from collections import deque
 from datetime import datetime
 from loguru import logger
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
+
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
 SECTOR_ETFS = [
     "XLF",   # Financials
     "XLK",   # Technology
@@ -129,7 +139,7 @@ class MarketInternals:
         if not breadth or spy_price <= 0:
             return
         self._breadth_history.append({
-            "time":       datetime.now(),
+            "time":       _now_ct(),
             "breadth_pct": breadth["breadth_pct"],
             "signal":      breadth["signal"],
             "spy_price":   round(spy_price, 2),

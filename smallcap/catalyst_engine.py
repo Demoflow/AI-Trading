@@ -168,7 +168,8 @@ class CatalystEngine:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
-        self._seen_ids: set[str] = set()  # deduplicate feed entries
+        # {entry_id: datetime_added} — bounds memory; pruned alongside _events
+        self._seen_ids: dict[str, datetime] = {}
         # LLM result cache: headline_id → adjusted_score (avoids re-scoring same headline)
         self._llm_cache: dict[str, int] = {}
 
@@ -307,7 +308,7 @@ class CatalystEngine:
                     entry_key = f"efts:{hit_id}"
                     if entry_key in self._seen_ids:
                         continue
-                    self._seen_ids.add(entry_key)
+                    self._seen_ids[entry_key] = _utcnow()
 
                     # Extract tickers from display_names list
                     display_names = source.get("display_names", [])
@@ -339,7 +340,7 @@ class CatalystEngine:
                         new_count += 1
 
             except (URLError, json.JSONDecodeError, OSError) as e:
-                logger.debug(f"EDGAR EFTS query '{query}': {e}")
+                logger.warning(f"EDGAR EFTS query '{query}': {e}")
 
             # Polite delay between queries
             if not self._stop_event.is_set():
@@ -362,7 +363,7 @@ class CatalystEngine:
             entry_id = entry.get("id", "")
             if entry_id in self._seen_ids:
                 continue
-            self._seen_ids.add(entry_id)
+            self._seen_ids[entry_id] = _utcnow()
 
             title   = html.unescape(entry.get("title", ""))
             summary = html.unescape(entry.get("summary", ""))
@@ -425,7 +426,7 @@ class CatalystEngine:
                 entry_id = entry.get("id", entry.get("link", ""))
                 if entry_id in self._seen_ids:
                     continue
-                self._seen_ids.add(entry_id)
+                self._seen_ids[entry_id] = _utcnow()
 
                 title   = html.unescape(entry.get("title", ""))
                 summary = html.unescape(entry.get("summary", ""))
@@ -503,10 +504,10 @@ class CatalystEngine:
                 # Still check the title for clear catalyst words before skipping
                 title_check = html.unescape(entry.get("title", ""))
                 if _score_text(title_check) < 20:
-                    self._seen_ids.add(entry_id)
+                    self._seen_ids[entry_id] = _utcnow()
                     continue
 
-            self._seen_ids.add(entry_id)
+            self._seen_ids[entry_id] = _utcnow()
 
             title   = html.unescape(entry.get("title", ""))
             summary = html.unescape(entry.get("summary", ""))
@@ -535,62 +536,6 @@ class CatalystEngine:
 
         if new_count:
             logger.debug(f"PR Newswire: {new_count} new catalyst event(s)")
-
-    # ── SOURCE: YAHOO FINANCE RSS ─────────────────────────────────────────────
-
-    def _poll_yahoo(self):
-        """
-        Fetch Yahoo Finance RSS for universe tickers in batches.
-        Ticker-scoped feed: attribution is reliable, no expansion needed.
-        """
-        if not _FEEDPARSER_OK:
-            return
-
-        tickers = self._universe.get_tickers()
-        batches  = list(_chunk(tickers, _YAHOO_BATCH_SIZE))
-        new_count = 0
-
-        for batch in batches:
-            if self._stop_event.is_set():
-                break
-            url  = _YAHOO_RSS_TEMPLATE.format(symbols=",".join(batch))
-            feed = feedparser.parse(url, request_headers={"User-Agent": _USER_AGENT})
-
-            for entry in feed.entries:
-                entry_id = entry.get("id", "")
-                if entry_id in self._seen_ids:
-                    continue
-                self._seen_ids.add(entry_id)
-
-                title   = html.unescape(entry.get("title", ""))
-                summary = html.unescape(entry.get("summary", ""))
-                text    = f"{title} {summary}"
-
-                score = _score_text(text)
-                if score == 0:
-                    continue
-
-                mentioned = _extract_tickers_text(text)
-                batch_set = set(batch)
-                targets   = [t for t in mentioned if t in batch_set]
-                if not targets:
-                    targets = batch  # attribute to all batch members if no explicit mention
-
-                ts = _parse_feed_time(entry)
-                for sym in targets:
-                    self._record_catalyst(sym, score, ts, title, expand_universe=False)
-                    new_count += 1
-
-                logger.info(
-                    f"Yahoo: {', '.join(targets)} "
-                    f"score={score:+d} | {title[:80]}"
-                )
-
-            if not self._stop_event.is_set():
-                time.sleep(0.3)
-
-        if new_count:
-            logger.debug(f"Yahoo poll: {new_count} new catalyst event(s)")
 
     # ── LLM SENTIMENT REFINEMENT ──────────────────────────────────────────────
 
@@ -750,6 +695,13 @@ Score range: -50 to 50"""
                 if not self._events[sym]:
                     del self._events[sym]
 
+        # Prune _seen_ids older than the score window so the set stays bounded.
+        # Without this, a long-running session accumulates tens of thousands of
+        # IDs (one per feed entry checked), growing indefinitely.
+        stale_ids = [k for k, ts in self._seen_ids.items() if ts < cutoff]
+        for k in stale_ids:
+            del self._seen_ids[k]
+
 
 # ── MODULE-LEVEL HELPERS ───────────────────────────────────────────────────────
 
@@ -813,8 +765,3 @@ def _parse_feed_time(entry) -> datetime:
 
 def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
-
-
-def _chunk(lst: list, n: int):
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
