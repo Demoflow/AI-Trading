@@ -229,3 +229,16 @@ header {
   .closed-item { grid-template-columns: 60px 2fr 1fr; }
   .closed-item .closed-duration, .closed-item .closed-result { display: none; }
 }
+
+@media (max-width: 480px) {
+  body { font-size: 12px; padding: 8px; }
+  .summary { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .card .value { font-size: 15px; }
+  .card .label { font-size: 9px; }
+  .position { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .closed-item { grid-template-columns: 55px 1fr 70px; }
+  .log { max-height: 180px; font-size: 10px; }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  header { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .meta { font-size: 11px; }
+}
