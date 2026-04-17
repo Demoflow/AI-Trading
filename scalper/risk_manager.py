@@ -310,7 +310,10 @@ class ScalperRiskManager:
         if entry_time:
             if isinstance(entry_time, str):
                 entry_time = datetime.fromisoformat(entry_time)
-            mins = (datetime.now() - entry_time).total_seconds() / 60
+            now_dt = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+            if entry_time.tzinfo is None and now_dt.tzinfo is not None:
+                entry_time = entry_time.replace(tzinfo=_CT_TZ)
+            mins = (now_dt - entry_time).total_seconds() / 60
             if mins >= max_hold:
                 return True, f"time_{mins:.0f}min", None
 
