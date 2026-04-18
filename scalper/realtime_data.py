@@ -88,6 +88,10 @@ class CandleBuilder:
     def candle_count(self):
         return len(self.candles)
 
+    def get_current_block(self):
+        """Return the current candle time block identifier."""
+        return self._current_block
+
     def get_all_candles(self):
         result = list(self.candles)
         if self._current:
@@ -288,6 +292,8 @@ class RealtimeDataEngine:
         self.builders = self.builders_5m
         self.indicators = Indicators()
         self._session_candles = {s: [] for s in _SYMS}
+        # Track previous totalVolume per symbol for delta calculation
+        self._prev_total_volume = {s: 0 for s in _SYMS}
 
     def seed_history(self):
         """
@@ -361,18 +367,22 @@ class RealtimeDataEngine:
                     data = resp.json()
                     q = data.get(sym, {}).get("quote", {})
                     price = q.get("lastPrice", 0)
-                    volume = q.get("totalVolume", 0)
+                    total_volume = q.get("totalVolume", 0)
                     if price > 0:
-                        # Feed both timeframes
-                        new_5m = self.builders_5m[sym].add_quote(price, volume)
-                        self.builders_1m[sym].add_quote(price, volume)
+                        # Compute volume delta (totalVolume is cumulative for the day)
+                        prev_vol = self._prev_total_volume.get(sym, 0)
+                        vol_delta = max(total_volume - prev_vol, 0) if total_volume > 0 else 0
+                        self._prev_total_volume[sym] = total_volume
+                        # Feed both timeframes with volume delta
+                        new_5m = self.builders_5m[sym].add_quote(price, vol_delta)
+                        self.builders_1m[sym].add_quote(price, vol_delta)
                         if new_5m:
                             self._session_candles[sym].append(new_5m)
                         results[sym] = {
                             "price": price,
                             "bid": q.get("bidPrice", 0),
                             "ask": q.get("askPrice", 0),
-                            "volume": volume,
+                            "volume": total_volume,
                             "net_pct": q.get("netPercentChange", 0),
                         }
             except Exception as e:

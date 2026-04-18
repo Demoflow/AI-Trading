@@ -148,17 +148,29 @@ class ScalperSignal:
             current_candle = snap.get("current_candle", {})
             current_volume = current_candle.get("volume", 0) if current_candle else 0
 
+            # For proxy symbols, use the proxy's price for VWAP comparison
+            # but keep the actual trading symbol's price for entry
+            scan_price = current_price
+            if vwap_symbol != symbol:
+                proxy_snap = data_engine.get_snapshot(vwap_symbol)
+                if proxy_snap:
+                    scan_price = proxy_snap["price"]
+                else:
+                    continue  # Can't compare against proxy VWAP without proxy price
+
             # Scan VWAPEngine for signal on the VWAP symbol
             signal = vwap_engine.scan(
-                vwap_symbol, candles, current_price, current_volume,
+                vwap_symbol, candles, scan_price, current_volume,
                 day_type=day_type, breadth_signal=breadth_signal
             )
 
             if not signal:
                 continue
 
-            # Override symbol to the actual trading symbol (e.g., TQQQ not QQQ)
+            # Override symbol and entry price to the actual trading symbol
             signal["symbol"] = symbol
+            signal["entry_price"] = round(current_price, 2)
+            signal["_is_proxy"] = (vwap_symbol != symbol)
 
             # Apply time window adjustments
             signal["time_window"] = window
@@ -202,21 +214,35 @@ class ScalperSignal:
     def _compute_levels(self, signal, stop_dist_pct):
         """Compute stop_price, target_1, target_2 from signal data."""
         price = signal["entry_price"]
-        vwap = signal["vwap"]
         direction = signal["direction"]
+        is_proxy = signal.get("_is_proxy", False)
 
-        if direction == "LONG":
-            # Stop below VWAP minus stop distance
-            stop_price = round(vwap * (1 - stop_dist_pct / 100), 2)
-            # Also ensure stop is below entry
-            stop_price = min(stop_price, round(price * (1 - stop_dist_pct / 100), 2))
-            target_1 = signal["sd1_upper"]
-            target_2 = signal["sd2_upper"]
-        else:  # SHORT
-            stop_price = round(vwap * (1 + stop_dist_pct / 100), 2)
-            stop_price = max(stop_price, round(price * (1 + stop_dist_pct / 100), 2))
-            target_1 = signal["sd1_lower"]
-            target_2 = signal["sd2_lower"]
+        if is_proxy:
+            # Proxy symbols (e.g., TQQQ using QQQ VWAP): compute stops and targets
+            # purely from the trading symbol's price, since VWAP/SD bands are in
+            # the proxy's price space and cannot be used directly.
+            if direction == "LONG":
+                stop_price = round(price * (1 - stop_dist_pct / 100), 2)
+                target_1 = round(price * (1 + stop_dist_pct / 100 * 1.5), 2)
+                target_2 = round(price * (1 + stop_dist_pct / 100 * 3.0), 2)
+            else:
+                stop_price = round(price * (1 + stop_dist_pct / 100), 2)
+                target_1 = round(price * (1 - stop_dist_pct / 100 * 1.5), 2)
+                target_2 = round(price * (1 - stop_dist_pct / 100 * 3.0), 2)
+        else:
+            vwap = signal["vwap"]
+            if direction == "LONG":
+                # Stop below VWAP minus stop distance
+                stop_price = round(vwap * (1 - stop_dist_pct / 100), 2)
+                # Also ensure stop is below entry
+                stop_price = min(stop_price, round(price * (1 - stop_dist_pct / 100), 2))
+                target_1 = signal["sd1_upper"]
+                target_2 = signal["sd2_upper"]
+            else:  # SHORT
+                stop_price = round(vwap * (1 + stop_dist_pct / 100), 2)
+                stop_price = max(stop_price, round(price * (1 + stop_dist_pct / 100), 2))
+                target_1 = signal["sd1_lower"]
+                target_2 = signal["sd2_lower"]
 
         signal["stop_price"] = stop_price
         signal["target_1"] = round(target_1, 2)

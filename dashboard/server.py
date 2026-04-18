@@ -151,7 +151,13 @@ def enrich_positions(positions):
         held_min = 0
         try:
             et = datetime.fromisoformat(pos.get("entry_time", ""))
-            held_min = (datetime.now() - et).total_seconds() / 60
+            now = datetime.now()
+            # Handle tz-aware entry_time vs naive now
+            if et.tzinfo is not None and now.tzinfo is None:
+                now = datetime.now(et.tzinfo)
+            elif et.tzinfo is None and now.tzinfo is not None:
+                et = et.replace(tzinfo=now.tzinfo)
+            held_min = (now - et).total_seconds() / 60
         except Exception:
             pass
 

@@ -236,6 +236,10 @@ def run():
 
     logger.info("VWAP engine seeded from historical candles")
 
+    # Track volume already fed to VWAP engine per symbol to avoid double-counting
+    _vwap_fed_volume = {sym: 0 for sym in stock_universe.get_all_tracked_symbols()}
+    _vwap_fed_block = {sym: None for sym in stock_universe.get_all_tracked_symbols()}
+
     import atexit
     atexit.register(_release_lock, lock_path)
 
@@ -272,6 +276,15 @@ def run():
                     try:
                         price, _ = get_stock_quote(client, pos["symbol"])
                         if not price:
+                            # Retry once after short delay
+                            time.sleep(1)
+                            price, _ = get_stock_quote(client, pos["symbol"])
+                        if not price:
+                            # Use last known price as fallback for EOD close
+                            price = pos.get("current_price", pos.get("entry_price", 0))
+                            logger.warning(f"EOD close using last known price for {pos['symbol']}: ${price}")
+                        if not price:
+                            logger.error(f"Cannot close {pos['symbol']} — no price available")
                             continue
                         result = executor.close_position(pos["id"], price, "EOD_FLATTEN")
                     except Exception as e:
@@ -293,6 +306,8 @@ def run():
                     logger.warning(f"EOD safety close: {len(open_pos)} positions")
                     for pos in open_pos:
                         price, _ = get_stock_quote(client, pos["symbol"])
+                        if not price:
+                            price = pos.get("current_price", pos.get("entry_price", 0))
                         if price:
                             result = executor.close_position(pos["id"], price, "EOD_SAFETY")
                             if result["status"] == "CLOSED":
@@ -333,10 +348,27 @@ def run():
         for sym in stock_universe.get_all_tracked_symbols():
             builder = data_engine.builders_5m.get(sym)
             if builder:
+                # Feed completed candles that haven't been fed yet
                 cur = builder.get_current()
+                cur_block = builder.get_current_block()
+                prev_block = _vwap_fed_block.get(sym)
+                if prev_block is not None and cur_block != prev_block:
+                    # A new candle started — the previous candle was just completed
+                    # and appended to builder.candles. Feed it to VWAP engine.
+                    all_candles = list(builder.candles)
+                    if all_candles:
+                        last_completed = all_candles[-1]
+                        vwap_engine.update_candle(sym, last_completed)
+                    _vwap_fed_volume[sym] = 0
+                _vwap_fed_block[sym] = cur_block
+                # For the current (still-building) candle, feed only the volume delta
                 if cur and cur.get("volume", 0) > 0:
-                    tp = (cur["high"] + cur["low"] + cur["close"]) / 3.0
-                    vwap_engine.update(sym, tp, cur["volume"])
+                    fed = _vwap_fed_volume.get(sym, 0)
+                    delta_vol = cur["volume"] - fed
+                    if delta_vol > 0:
+                        tp = (cur["high"] + cur["low"] + cur["close"]) / 3.0
+                        vwap_engine.update(sym, tp, delta_vol)
+                        _vwap_fed_volume[sym] = cur["volume"]
 
         # ── INITIAL DAY CLASSIFICATION (after 30 min) ──
         if not classified:

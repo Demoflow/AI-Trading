@@ -113,7 +113,11 @@ _state = MonitorState()
 # Utilities
 # ──────────────────────────────────────────────────────────────────────────────
 def _hour_ct() -> float:
-    now = datetime.now()
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(tz=ZoneInfo("America/Chicago"))
+    except ImportError:
+        now = datetime.now()
     return now.hour + now.minute / 60.0
 
 
@@ -312,7 +316,7 @@ def _process_log_lines(lines: list[str]):
         # ── Scalper trade opened ──
         m = _RE_SCALP_OPEN.search(line)
         if m:
-            direction, sym = m.group(1), m.group(2)
+            sym, direction = m.group(1), m.group(2)
             _alert(
                 f"trade_open:scalp:{sym}",
                 f"Scalper Entry — {direction} {sym}",
@@ -324,7 +328,7 @@ def _process_log_lines(lines: list[str]):
         m = _RE_SCALP_WIN.search(line) or _RE_SCALP_LOSS.search(line)
         if m:
             outcome = "WIN" if "WIN" in line else "LOSS"
-            direction, sym, pnl = m.group(1), m.group(2), m.group(3)
+            direction, sym, _shares, pnl = m.group(1), m.group(2), m.group(3), m.group(4)
             emoji = "+" if outcome == "WIN" else "-"
             _alert(
                 f"trade_close:scalp:{sym}",
