@@ -156,6 +156,9 @@ header {
 .pos-pnl.green { color: #22c55e; }
 .pos-pnl.red { color: #ef4444; }
 
+.dir-long { color: #22c55e; font-size: 11px; font-weight: 700; margin-left: 6px; }
+.dir-short { color: #ef4444; font-size: 11px; font-weight: 700; margin-left: 6px; }
+
 .pos-pnl-pct {
   font-size: 11px;
   font-weight: 400;

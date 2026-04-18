@@ -1,13 +1,14 @@
 """
-0DTE Scalper v6.0 — Pattern & Sequence Aware.
-- Long calls and puts only | 2% per trade | uncapped trades
-- Settled cash tracking (T+1)
-- Pattern engine: 4 candle-sequence fingerprints
-- Regime transition detection (re-classifies every 30 min)
-- GEX level interaction tracking (rejected vs absorbed)
-- Time-of-day sequence gating (6 behavioral windows)
-- Breadth divergence detection (accumulation / distribution)
-- All contexts feed into signal_engine.scan() as confidence modifiers
+VWAP Stock Scalper v7.0 — Autonomous Intraday Trading System.
+
+Replaces the 0DTE options scalper with a VWAP-based stock scalping system.
+Targets aggressive growth on a $25,000 account.
+
+Entry point: python scripts/scalper_live.py
+Launched via SCALPER.bat or Windows Task Scheduler.
+
+Core loop runs every 30 seconds during market hours.
+All times in CT (America/Chicago).
 """
 
 import os
@@ -30,15 +31,18 @@ def _hour_ct() -> float:
     n = _now_ct()
     return n.hour + n.minute / 60.0 + n.second / 3600.0
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BASE_DIR)
 
 from loguru import logger
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+load_dotenv(Path(_BASE_DIR) / ".env")  # Explicit path — works from Task Scheduler
 
-POLL_INTERVAL = 5
-SCALP_EQUITY  = 25000
+POLL_INTERVAL = 30      # 30-second main loop cycle
+SCALP_EQUITY = 25000
 
 import json as _json
 
@@ -70,42 +74,14 @@ def _save_scalper_overrides(data: dict):
     except Exception:
         pass
 
-SYMBOLS = [
-    # Broad market ETFs
-    "SPY", "QQQ", "IWM",
-    # Mega-cap tech
-    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
-    # High-volatility / high-flow
-    "TSLA", "AMD", "NFLX", "PLTR", "MSTR",
-    # Sector ETF
-    "SMH",
-    # Financials / Energy
-    "COIN", "JPM", "XOM",
-]
-
-
-def get_option_value(client, sym):
-    try:
-        resp = client.get_quote(sym)
-        if resp and resp.status_code == 200:
-            data = resp.json()
-            q    = data.get(sym, {}).get("quote", {})
-            mark = q.get("mark", 0)
-            bid  = q.get("bidPrice", 0)
-            ask  = q.get("askPrice", 0)
-            if mark > 0:
-                return mark
-            if bid > 0 and ask > 0:
-                return (bid + ask) / 2
-        return None
-    except Exception:
-        return None
-
 
 def _acquire_lock():
     """Write a PID lock file. Returns False if another instance is already running."""
     import psutil
-    lock_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scalper.lock")
+    lock_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "scalper.lock"
+    )
     if os.path.exists(lock_path):
         try:
             with open(lock_path) as f:
@@ -113,7 +89,7 @@ def _acquire_lock():
             if psutil.pid_exists(old_pid):
                 return False, lock_path, old_pid
         except Exception:
-            pass  # Stale/corrupt lock — overwrite it
+            pass
     with open(lock_path, "w") as f:
         f.write(str(os.getpid()))
     return True, lock_path, os.getpid()
@@ -127,6 +103,22 @@ def _release_lock(lock_path):
         pass
 
 
+def get_stock_quote(client, symbol):
+    """Get current stock price from Schwab."""
+    try:
+        import httpx
+        resp = client.get_quote(symbol)
+        if resp and resp.status_code == httpx.codes.OK:
+            data = resp.json()
+            q = data.get(symbol, {}).get("quote", {})
+            price = q.get("lastPrice", 0)
+            volume = q.get("totalVolume", 0)
+            return price, volume
+        return None, None
+    except Exception:
+        return None, None
+
+
 def run():
     from utils.logging_setup import setup_logging
     setup_logging()
@@ -136,16 +128,16 @@ def run():
     if not acquired:
         logger.warning("=" * 60)
         logger.warning(f"SCALPER ALREADY RUNNING (PID {pid}) — exiting.")
-        logger.warning("Stop the existing instance before launching a new one.")
         logger.warning("=" * 60)
         return
 
     logger.info("=" * 60)
-    logger.info("0DTE SCALPER v6.0 — PATTERN & SEQUENCE AWARE")
+    logger.info("VWAP STOCK SCALPER v7.0")
     logger.info(f"Starting equity: ${SCALP_EQUITY:,.2f}")
-    logger.info("Long calls + puts | 2% per trade | uncapped | settled cash")
+    logger.info("Stock scalping | VWAP signals | 30s cycle")
     logger.info("=" * 60)
 
+    # ── SCHWAB AUTH ──
     try:
         from data.broker.schwab_auth import get_schwab_client
         client = get_schwab_client()
@@ -155,48 +147,39 @@ def run():
         _release_lock(lock_path)
         return
 
+    # ── INITIALIZE COMPONENTS ──
     from scalper.realtime_data    import RealtimeDataEngine
+    from scalper.vwap_engine      import VWAPEngine
+    from scalper.stock_universe   import StockUniverse
     from scalper.signal_engine    import ScalperSignal
-    from scalper.contract_picker  import ContractPicker
     from scalper.risk_manager     import ScalperRiskManager
     from scalper.executor         import ScalperExecutor
+    from scalper.exit_manager     import ExitManager
     from scalper.day_classifier   import DayClassifier
     from scalper.gex_intraday     import IntradayGEX
     from scalper.market_internals import MarketInternals
-    from scalper.pattern_engine   import PatternEngine
-    from scalper.time_context     import TimeContextFilter
 
-    data_engine  = RealtimeDataEngine(client)
-    signals      = ScalperSignal()
-    picker       = ContractPicker(client)
-    executor     = ScalperExecutor(SCALP_EQUITY)
-    risk         = ScalperRiskManager(executor.portfolio.get("equity", SCALP_EQUITY))
-    day_class    = DayClassifier()
-    gex          = IntradayGEX(client)
-    internals    = MarketInternals(client)
-    pattern_eng  = PatternEngine()
-    time_ctx     = TimeContextFilter()
+    stock_universe = StockUniverse()
+    vwap_engine    = VWAPEngine()
+    data_engine    = RealtimeDataEngine(client)
+    signals        = ScalperSignal()
+    executor       = ScalperExecutor(SCALP_EQUITY)
+    risk           = ScalperRiskManager(executor.portfolio.get("equity", SCALP_EQUITY))
+    exit_mgr       = ExitManager()
+    day_class      = DayClassifier()
+    gex            = IntradayGEX(client)
+    internals      = MarketInternals(client)
 
     # ── STARTUP TASKS ──
-    available = executor.advance_settlement()
-    logger.info(f"Settled cash available: ${available:,.2f}")
-
-    expired = executor.expire_stale_positions()
-    if expired:
-        logger.info(f"Cleaned up {expired} expired positions")
-
     risk.update_equity(executor.portfolio.get("equity", SCALP_EQUITY))
 
-    # Reconcile risk state against executor's portfolio history for today.
-    # _load_state() already tried disk; this cross-checks against trade records
-    # in case the state file is stale or missing (e.g. first run of the day).
+    # Reconcile risk state from executor history
     from datetime import date as _date
     _today = _date.today().isoformat()
     _ds = executor.portfolio.get("daily_stats", {}).get(_today, {})
     if _ds.get("trades", 0) > risk.trades_today:
         risk.trades_today = _ds["trades"]
-        risk.daily_pnl    = _ds.get("pnl", 0.0)
-        # Reconstruct consecutive losses from recent history
+        risk.daily_pnl = _ds.get("pnl", 0.0)
         _hist = executor.portfolio.get("history", [])
         _today_hist = [t for t in _hist if t.get("entry_time", "")[:10] == _today]
         _streak = 0
@@ -207,9 +190,8 @@ def run():
                 break
         risk._consecutive_losses = max(risk._consecutive_losses, _streak)
         logger.info(
-            f"Risk state reconciled from history: "
-            f"trades={risk.trades_today} pnl=${risk.daily_pnl:+,.2f} "
-            f"streak={risk._consecutive_losses}"
+            f"Risk state reconciled: trades={risk.trades_today} "
+            f"pnl=${risk.daily_pnl:+,.2f} streak={risk._consecutive_losses}"
         )
 
     # VIX
@@ -224,105 +206,100 @@ def run():
 
     is_event, event = risk.is_event_day()
     if is_event:
-        logger.warning(f"EVENT DAY: {event} — entry bar raised automatically")
+        logger.warning(f"EVENT DAY: {event}")
 
     # Cycle tracking
-    cycle           = 0
-    classified      = False
-    gap_captured    = False
-    _force_closed   = False  # Ensures the EOD force-close block runs only once per day
+    cycle = 0
+    classified = False
+    _force_closed = False
 
-    # Cached market context (refresh intervals in cycles, 1 cycle = 5s)
-    gex_cache     = {}
+    # Cached context (refresh intervals)
+    gex_cache = {}
     breadth_cache = None
-    em_cache      = {}
-    div_cache     = None
-    last_gex      = 0
-    last_breadth  = 0
-    last_em       = 0
-    last_regime   = 0   # Regime update: every 360 cycles (30 min)
+    last_gex = 0
+    last_breadth = 0
+    last_regime = 0
+    last_vix = 0
 
     logger.info(f"VIX: {vix:.1f}")
-    logger.info("Building candles (1m + 5m)...")
+    logger.info(f"Universe: {', '.join(stock_universe.get_all_symbols())}")
+    logger.info("Seeding candle history...")
     data_engine.seed_history()
+
+    # Seed VWAP engine from historical candles
+    for sym in stock_universe.get_all_tracked_symbols():
+        builder = data_engine.builders_5m.get(sym)
+        if builder:
+            candles = builder.get_all_candles()
+            if candles:
+                vwap_engine.seed_candles(sym, candles)
+
+    logger.info("VWAP engine seeded from historical candles")
 
     import atexit
     atexit.register(_release_lock, lock_path)
 
     while True:
         now = _now_ct()
-        h   = _hour_ct()
+        h = _hour_ct()
 
         # ── AGENT OVERRIDE CHECK ──
         _ov = _load_scalper_overrides()
-        _scalper_paused  = _ov.get("scalper_paused", False)
+        _scalper_paused = _ov.get("scalper_paused", False)
         _blocked_scalper = set(s.upper() for s in _ov.get("blocked_symbols", []))
         if _ov.get("flatten_all"):
-            logger.warning("[Agent] FLATTEN ALL received — closing all scalper positions")
+            logger.warning("[Agent] FLATTEN ALL — closing all positions")
             for pos in executor.get_open_positions():
-                csym = pos.get("contract", "")
-                if csym:
-                    current = get_option_value(client, csym)
-                    result  = executor.close_position(pos["id"], current if current else 0.01)
+                price, _ = get_stock_quote(client, pos["symbol"])
+                if price:
+                    result = executor.close_position(pos["id"], price, "agent_flatten")
                     if result["status"] == "CLOSED":
                         risk.record_trade(result["pnl"])
-                        logger.info(f"[Agent] FLATTEN: {pos['symbol']} P&L=${result['pnl']:+,.2f}")
+                        signals.record_exit(pos["symbol"])
             _ov["flatten_all"] = False
             _save_scalper_overrides(_ov)
 
-        # ── SYNC POSITION COUNT AND EQUITY EACH CYCLE ──
+        # ── SYNC STATE ──
         risk.open_positions = len(executor.get_open_positions())
         risk.update_equity(executor.portfolio.get("equity", SCALP_EQUITY))
 
-        # ── FORCE-CLOSE ALL POSITIONS AT 2:45 PM CT (3:45 PM ET) ──
-        # _force_closed flag prevents this from re-running every 5s for 6 minutes.
-        if h >= 14.75 and not _force_closed and cycle > 0:
+        # ── FORCE-CLOSE ALL AT 3:30 PM CT ──
+        if h >= 15.5 and not _force_closed and cycle > 0:
             open_pos = executor.get_open_positions()
             if open_pos:
-                logger.warning(f"2:45 PM CT FORCE CLOSE: {len(open_pos)} positions")
+                logger.warning(f"3:30 PM CT FORCE CLOSE: {len(open_pos)} positions")
                 for pos in open_pos:
-                    csym = pos.get("contract", "")
-                    if not csym:
-                        continue
                     try:
-                        current = get_option_value(client, csym)
-                        result  = executor.close_position(pos["id"], current if current else 0.01)
+                        price, _ = get_stock_quote(client, pos["symbol"])
+                        if not price:
+                            continue
+                        result = executor.close_position(pos["id"], price, "EOD_FLATTEN")
                     except Exception as e:
                         logger.error(f"Force-close error {pos['symbol']}: {e}")
                         continue
                     if result["status"] == "CLOSED":
                         risk.record_trade(result["pnl"])
-                        logger.info(
-                            f"FORCE CLOSED: {pos['symbol']} "
-                            f"P&L=${result['pnl']:+,.2f}"
-                        )
+                        signals.record_exit(pos["symbol"])
             _force_closed = True
 
         # ── SESSION BOUNDARY ──
-        # Reset daily flags when outside market hours
         if h < 8.4:
             _force_closed = False
-        if now.weekday() >= 5 or h < 8.4 or h >= 15.1:
-            if h >= 15.1 and cycle > 0:
-                # Safety flush — close any positions still open at session end
+        if now.weekday() >= 5 or h < 8.4 or h >= 16.0:
+            if h >= 16.0 and cycle > 0:
+                # Safety flush
                 open_pos = executor.get_open_positions()
                 if open_pos:
-                    logger.warning(f"EOD safety close: {len(open_pos)} positions still open")
+                    logger.warning(f"EOD safety close: {len(open_pos)} positions")
                     for pos in open_pos:
-                        csym = pos.get("contract", "")
-                        if not csym:
-                            continue
-                        current = get_option_value(client, csym)
-                        result = executor.close_position(pos["id"], current if current else 0.01)
-                        if result["status"] == "CLOSED":
-                            risk.record_trade(result["pnl"])
-                            logger.info(
-                                f"EOD CLOSED: {pos['symbol']} "
-                                f"P&L=${result['pnl']:+,.2f}"
-                            )
+                        price, _ = get_stock_quote(client, pos["symbol"])
+                        if price:
+                            result = executor.close_position(pos["id"], price, "EOD_SAFETY")
+                            if result["status"] == "CLOSED":
+                                risk.record_trade(result["pnl"])
                 s = executor.get_summary()
                 logger.info("=" * 60)
-                logger.info("SCALPER v6.0 END OF DAY")
+                logger.info("VWAP SCALPER v7.0 END OF DAY")
                 logger.info(f"  Day: {day_class.day_type}")
                 logger.info(
                     f"  Trades:{s['today_trades']} "
@@ -332,8 +309,7 @@ def run():
                 logger.info(
                     f"  Total:{s['total_trades']} "
                     f"WR:{s['win_rate']:.0%} "
-                    f"Equity:${s['equity']:,.2f} "
-                    f"P&L:${s['total_pnl']:+,.2f}"
+                    f"Equity:${s['equity']:,.2f}"
                 )
                 logger.info("=" * 60)
                 break
@@ -344,366 +320,222 @@ def run():
             continue
 
         cycle += 1
-        quotes = data_engine.poll()
+
+        # ── POLL QUOTES ──
+        try:
+            quotes = data_engine.poll()
+        except Exception as e:
+            logger.warning(f"Poll error: {e}")
+            time.sleep(POLL_INTERVAL)
+            continue
+
+        # ── UPDATE VWAP ENGINE ──
+        for sym in stock_universe.get_all_tracked_symbols():
+            builder = data_engine.builders_5m.get(sym)
+            if builder:
+                cur = builder.get_current()
+                if cur and cur.get("volume", 0) > 0:
+                    tp = (cur["high"] + cur["low"] + cur["close"]) / 3.0
+                    vwap_engine.update(sym, tp, cur["volume"])
 
         # ── INITIAL DAY CLASSIFICATION (after 30 min) ──
         if not classified:
             spy_b = data_engine.builders_5m.get("SPY")
             if spy_b and spy_b.candle_count() >= 6:
-                spy_snap_tmp = data_engine.get_snapshot("SPY")
-                atr_now = spy_snap_tmp["atr"] if spy_snap_tmp else None
+                spy_snap = data_engine.get_snapshot("SPY")
+                atr_now = spy_snap["atr"] if spy_snap else None
                 day_class.classify(spy_b, vix, atr=atr_now)
                 classified = True
                 internals.initialize()
-                # Eagerly populate breadth so the direction filter is armed
-                # before the first entry cycle. Without this, breadth_cache
-                # stays None for ~2 min after any restart, bypassing the block
-                # that prevents PUT entries on STRONG_BULLISH days (and vice versa).
                 breadth_cache = internals.get_breadth()
                 if breadth_cache:
-                    spy_px_init = data_engine.get_snapshot("SPY")
-                    spy_px_init = spy_px_init["price"] if spy_px_init else 0
-                    internals.record_breadth(breadth_cache, spy_px_init)
-                    div_cache = internals.get_divergence()
-                    logger.info(
-                        f"Breadth (startup): {breadth_cache['signal']} "
-                        f"({breadth_cache['advancing']}/"
-                        f"{len(internals._baseline)} up)"
-                    )
+                    spy_px = spy_snap["price"] if spy_snap else 0
+                    internals.record_breadth(breadth_cache, spy_px)
                 last_breadth = cycle
                 risk.day_type = day_class.day_type
-                logger.info(
-                    f"Day classified: {day_class.day_type} "
-                    f"(transition detection active)"
-                )
+                logger.info(f"Day classified: {day_class.day_type}")
 
-        # ── GAP DIRECTION CAPTURE (first completed SPY candle) ──
-        if not gap_captured:
-            spy_b = data_engine.builders_5m.get("SPY")
-            if spy_b and spy_b.candle_count() >= 1:
-                first_candle = list(spy_b.candles)[0] if spy_b.candles else None
-                time_ctx.capture_gap(first_candle)
-                gap_captured = True
-
-        # ── GEX UPDATE (every 5 min = 60 cycles) ──
-        if cycle - last_gex >= 60:
-            for sym in SYMBOLS:
-                gex_cache[sym] = gex.analyze(sym)
+        # ── GEX UPDATE (every 5 min = 10 cycles at 30s) ──
+        if cycle - last_gex >= 10:
+            for sym in stock_universe.get_all_symbols():
+                try:
+                    gex_cache[sym] = gex.analyze(sym)
+                except Exception:
+                    pass
             last_gex = cycle
             g = gex_cache.get("SPY")
             if g:
                 risk.gex_regime = g["regime"]
-                logger.info(
-                    f"GEX: SPY {g['regime']} "
-                    f"pin=${g['pin_level']} "
-                    f"walls=${g['put_wall']}–${g['call_wall']}"
-                )
 
-        # ── BREADTH UPDATE (every 2 min = 24 cycles) ──
-        if cycle - last_breadth >= 24:
-            _fresh_breadth = internals.get_breadth()
-            if _fresh_breadth is not None:
-                breadth_cache = _fresh_breadth  # Never overwrite good data with None
-            # Feed breadth history for divergence tracking
+        # ── BREADTH UPDATE (every 2 min = 4 cycles) ──
+        if cycle - last_breadth >= 4:
+            _fresh = internals.get_breadth()
+            if _fresh is not None:
+                breadth_cache = _fresh
             if breadth_cache:
                 spy_snap = data_engine.get_snapshot("SPY")
-                spy_px   = spy_snap["price"] if spy_snap else 0
+                spy_px = spy_snap["price"] if spy_snap else 0
                 internals.record_breadth(breadth_cache, spy_px)
-                div_cache = internals.get_divergence()
-                if div_cache and div_cache["type"] not in ("NEUTRAL",):
-                    logger.info(
-                        f"Breadth: {breadth_cache['signal']} | "
-                        f"Divergence: {div_cache['type']} "
-                        f"score={div_cache['score']:+d} → {div_cache['signal_bias']}"
-                    )
-                else:
-                    logger.info(
-                        f"Breadth: {breadth_cache['signal']} "
-                        f"({breadth_cache['advancing']}/"
-                        f"{len(internals._baseline)} up)"
-                    )
             last_breadth = cycle
 
-        # ── EXPECTED MOVE UPDATE (every 10 min = 120 cycles) ──
-        if cycle - last_em >= 120:
-            for sym in SYMBOLS:
-                em_cache[sym] = picker.get_expected_move(sym)
-            last_em = cycle
-            em = em_cache.get("SPY")
-            if em:
-                logger.info(
-                    f"Expected Move: SPY +/-${em['expected_move']} "
-                    f"({em['expected_move_pct']:.2f}%) "
-                    f"${em['lower_bound']}–${em['upper_bound']}"
-                )
+        # ── VIX UPDATE (every 5 min) ──
+        if cycle - last_vix >= 10:
+            try:
+                import httpx
+                r = client.get_quote("$VIX")
+                if r.status_code == httpx.codes.OK:
+                    vix = r.json().get("$VIX", {}).get("quote", {}).get("lastPrice", vix)
+            except Exception:
+                pass
+            last_vix = cycle
 
-        # ── REGIME UPDATE (every 30 min = 360 cycles) ──
-        if classified and cycle - last_regime >= 360:
+        # ── REGIME UPDATE (every 15 min = 30 cycles) ──
+        if classified and cycle - last_regime >= 30:
             spy_b = data_engine.builders_5m.get("SPY")
             spy_snap = data_engine.get_snapshot("SPY")
-            atr_now  = spy_snap["atr"] if spy_snap else None
+            atr_now = spy_snap["atr"] if spy_snap else None
             day_class.update_regime(spy_b, vix, atr=atr_now)
             risk.day_type = day_class.day_type
             last_regime = cycle
-            transition = day_class.get_regime_transition()
-            if transition:
-                implication = day_class.get_transition_implication()
-                logger.warning(
-                    f"REGIME TRANSITION: {transition} → {implication}"
+
+        # ── CHECK EXITS FOR ALL OPEN POSITIONS ──
+        for pos in executor.get_open_positions():
+            try:
+                price, _ = get_stock_quote(client, pos["symbol"])
+                if price is None:
+                    continue
+
+                # Update position with current price
+                executor.update_position(pos["id"], price)
+
+                # Check exit conditions
+                should_exit, reason, action = exit_mgr.check_exit(
+                    pos, price, vwap_engine
                 )
 
-        # ── GEX LEVEL INTERACTION TRACKING (every 30s = 6 cycles) ──
-        if cycle % 6 == 0:
-            spy_snap = data_engine.get_snapshot("SPY")
-            if spy_snap and gex_cache.get("SPY"):
-                gex.record_price_interaction("SPY", spy_snap["price"], gex_cache["SPY"])
-            qqq_snap = data_engine.get_snapshot("QQQ")
-            if qqq_snap and gex_cache.get("QQQ"):
-                gex.record_price_interaction("QQQ", qqq_snap["price"], gex_cache["QQQ"])
-
-        # ── TIME CONTEXT ──
-        t_ctx = time_ctx.get_context(h)
-
-        # ── STRATEGY SELECTION ──
-        # Before classification (first ~30 min): use a conservative fixed set.
-        # DO NOT add all strategies unconditionally — the day-type logic exists
-        # precisely to prevent over-trading on QUIET/CHOPPY opens.
-        if classified:
-            allowed = day_class.get_strategy_for_window(h)
-            # Add breakout and aggressive directional on trending/volatile days
-            if day_class.day_type in ("TRENDING", "VOLATILE"):
-                for s in ["DIRECTIONAL_BUY", "ORB_BREAKOUT"]:
-                    if s not in allowed:
-                        allowed.append(s)
-        else:
-            # Pre-classification: only VWAP_PULLBACK; ORB allowed in opening window only
-            allowed = ["VWAP_PULLBACK"]
-            if h < 10.0:
-                allowed.append("ORB_BREAKOUT")
-
-        # ── CHECK EXITS ──
-        for pos in executor.get_open_positions():
-            csym = pos.get("contract", "")
-            if not csym:
-                continue
-            current = get_option_value(client, csym)
-            if current is None:
-                continue
-            current_value = current * pos["qty"] * 100
-
-            if current_value > pos.get("peak_value", 0):
-                pos["peak_value"] = current_value
-
-            should_exit, reason, action = risk.check_exit(pos, current_value)
-            if should_exit:
-                result = executor.close_position(pos["id"], current)
-                if result["status"] == "CLOSED":
-                    risk.record_trade(result["pnl"])
-                    logger.info(
-                        f"EXIT [{reason}]: {pos['direction']} {pos['symbol']} "
-                        f"P&L=${result['pnl']:+,.2f}"
-                    )
+                if should_exit:
+                    if action == "HALF_EXIT":
+                        shares_to_sell = pos["shares"] // 2
+                        if shares_to_sell >= 1:
+                            result = executor.partial_exit(
+                                pos["id"], shares_to_sell, price, reason
+                            )
+                            if result and result["status"] == "PARTIAL":
+                                logger.info(
+                                    f"HALF EXIT [{reason}]: {pos['symbol']} "
+                                    f"{shares_to_sell} shares P&L=${result['pnl']:+,.2f}"
+                                )
+                    else:  # FULL_EXIT
+                        result = executor.close_position(pos["id"], price, reason)
+                        if result["status"] == "CLOSED":
+                            risk.record_trade(result["pnl"])
+                            signals.record_exit(pos["symbol"])
+                            logger.info(
+                                f"EXIT [{reason}]: {pos['symbol']} "
+                                f"P&L=${result['pnl']:+,.2f}"
+                            )
+            except Exception as e:
+                logger.warning(f"Exit check error {pos['symbol']}: {e}")
 
         # ── CHECK ENTRY SIGNALS ──
         can_trade, trade_reason = risk.can_trade()
 
-        # Agent override: pause scalper entries
         if _scalper_paused:
             can_trade = False
 
-        # Hard time gates (belt + suspenders over time_context)
-        if h >= 15.5 or h < 8.58:
+        # Hard time gates
+        if h >= 15.5 or h < 9.0:
             can_trade = False
 
-        # Time context entry gate (window-level)
-        if not t_ctx.get("entry_allowed", True):
-            can_trade = False
-
-        # ── PRE-CLASSIFICATION POSITION CAP ──
-        # Before we know the day type, cap at 2 positions max.
-        # This prevents a burst of 5 simultaneous entries at open
-        # before any regime context is established.
+        # Pre-classification position cap
         if not classified and risk.open_positions >= 2:
             can_trade = False
 
-        if can_trade and allowed:
-            for sym in SYMBOLS:
+        if can_trade:
+            open_syms = {p["symbol"] for p in executor.get_open_positions()}
+
+            signal = signals.scan(
+                vwap_engine=vwap_engine,
+                data_engine=data_engine,
+                stock_universe=stock_universe,
+                day_type=day_class.day_type if classified else "",
+                gex_regime=risk.gex_regime,
+                vix_level=vix,
+                breadth=breadth_cache,
+                open_symbols=open_syms,
+            )
+
+            if signal:
+                # Check minimum confidence (risk manager + universe)
+                sym = signal["symbol"]
                 if sym in _blocked_scalper:
-                    continue
-                snap_5m = data_engine.get_snapshot(sym)
-                snap_1m = data_engine.get_entry_snapshot(sym)
-                if not snap_5m:
-                    continue
+                    signal = None
 
-                # ── PATTERN CONTEXT (per symbol, per cycle) ──
-                candles_5m = data_engine.builders_5m[sym].get_all_candles()
-                pat_ctx = pattern_eng.analyze(
-                    candles_5m,
-                    vwap=snap_5m.get("vwap", 0),
-                    atr=snap_5m.get("atr", 1),
-                    expected_move=em_cache.get(sym),
+            if signal:
+                sym = signal["symbol"]
+                min_conf_risk = risk.get_min_confidence(
+                    day_class.day_type if classified else ""
                 )
+                min_conf_univ = stock_universe.get_min_confidence(sym)
+                min_conf = max(min_conf_risk, min_conf_univ)
 
-                # ── GEX WALL CONTEXT (per symbol) ──
-                gex_wall_ctx = gex.get_wall_context(
-                    sym,
-                    snap_5m["price"],
-                    gex_cache.get(sym),
-                ) if gex_cache.get(sym) else None
-
-                new_signals = signals.scan(
-                    snapshot_5m=snap_5m,
-                    snapshot_1m=snap_1m,
-                    allowed_strategies=allowed,
-                    gex_profile=gex_cache.get(sym),
-                    breadth=breadth_cache,
-                    expected_move=em_cache.get(sym),
-                    pattern_context=pat_ctx,
-                    time_context=t_ctx,
-                    divergence=div_cache,
-                    gex_wall_context=gex_wall_ctx,
-                )
-
-                open_syms = {p["symbol"] for p in executor.get_open_positions()}
-
-                # ── QUIET-DAY CONFIDENCE FLOOR ──
-                # On choppy/quiet days the market doesn't move enough to
-                # justify borderline setups — theta kills them before they work.
-                min_conf = risk.get_min_confidence(day_class.day_type if classified else "")
-
-                for signal in new_signals:
-                    can_still, _ = risk.can_trade()
-                    if not can_still:
-                        break
-                    if h >= 15.5 or h < 8.58:
-                        break
-
-                    if signal["symbol"] in open_syms:
-                        logger.debug(
-                            f"  Blocked {signal['type']} {signal['symbol']}: "
-                            f"open position exists"
-                        )
-                        continue
-
-                    # ── QUIET-DAY CONFIDENCE FILTER ──
-                    if signal["confidence"] < min_conf:
-                        logger.debug(
-                            f"  Blocked {signal['symbol']}: conf {signal['confidence']} "
-                            f"< {min_conf} ({day_class.day_type if classified else 'unclassified'} floor)"
-                        )
-                        continue
-
-                    # ── DIRECTIONAL CONCENTRATION LIMIT (max 2 same direction) ──
-                    open_positions = executor.get_open_positions()
-                    same_dir = sum(1 for p in open_positions if p["direction"] == signal["direction"])
-                    if same_dir >= 2:
-                        logger.info(
-                            f"  Blocked {signal['symbol']}: "
-                            f"{same_dir} {signal['direction']}s already open (max 2)"
-                        )
-                        continue
-
-                    # ── SPY MACRO RSI GATE ──
-                    # Avoid adding directional bets when SPY is already stretched.
-                    # Exception: NEGATIVE GEX days where momentum continuation is valid.
-                    spy_snap_rsi = data_engine.get_snapshot("SPY")
-                    spy_rsi = spy_snap_rsi["rsi"] if spy_snap_rsi else 50
-                    spy_gex = gex_cache.get("SPY", {})
-                    gex_negative = spy_gex.get("regime") == "NEGATIVE"
-                    if not gex_negative:
-                        if signal["direction"] == "PUT" and spy_rsi < 40:
-                            logger.info(
-                                f"  Blocked {signal['symbol']}: SPY RSI {spy_rsi:.0f} "
-                                f"oversold — no new PUTs"
-                            )
-                            continue
-                        if signal["direction"] == "CALL" and spy_rsi > 65:
-                            logger.info(
-                                f"  Blocked {signal['symbol']}: SPY RSI {spy_rsi:.0f} "
-                                f"overbought — no new CALLs"
-                            )
-                            continue
-
-                    # Theta acceleration gate
-                    ok, tf_reason = picker.should_allow_buy(signal["confidence"])
-                    if not ok:
-                        logger.info(f"  Blocked {signal['symbol']}: {tf_reason}")
-                        continue
-
-                    # Breadth direction confirmation
-                    if breadth_cache:
-                        b_ok, b_reason = internals.confirms_direction(
-                            signal["direction"], breadth_cache
-                        )
-                        if not b_ok:
-                            logger.info(f"  Blocked {signal['symbol']}: {b_reason}")
-                            continue
-
-                    max_cost = risk.get_position_size(signal["confidence"])
-
-                    if executor.get_available_cash() < max_cost:
-                        logger.info(
-                            f"  Blocked {signal['symbol']}: insufficient settled cash "
-                            f"(${executor.get_available_cash():,.2f} < ${max_cost:,.2f})"
-                        )
-                        continue
-
-                    rr_str = f" RR:{signal.get('rr_ratio','?')}:1"
-                    logger.info(
-                        f"SIGNAL: {signal['type']} {signal['direction']} {signal['symbol']} "
-                        f"conf:{signal['confidence']}{rr_str} "
-                        f"[{t_ctx['window']}] | {signal['reason']}"
+                if signal["confidence"] >= min_conf:
+                    # Calculate position size
+                    position_limit = stock_universe.get_position_limit(
+                        sym, risk.equity
+                    )
+                    share_count, dollar_notional = risk.get_position_size(
+                        sym,
+                        signal["entry_price"],
+                        signal["stop_price"],
+                        signal["confidence"],
+                        position_limit=position_limit,
                     )
 
-                    contract = picker.pick(
-                        sym, signal["direction"], max_cost, "LONG_OPTION",
-                        confidence=signal["confidence"]
-                    )
-                    if contract:
-                        result = executor.open_position(signal, contract, max_cost)
+                    if share_count > 0:
+                        result = executor.open_position(signal, share_count)
                         if result["status"] == "FILLED":
                             risk.open_positions += 1
-                            open_syms.add(signal["symbol"])
                             risk.update_equity(
                                 executor.portfolio.get("equity", SCALP_EQUITY)
                             )
-                            # Clear acted-on transition after first new trade
-                            if day_class.get_regime_transition():
-                                day_class.clear_transition()
                     else:
-                        logger.info(f"  No contract: {sym} {signal['direction']}")
+                        logger.debug(
+                            f"Position size zero for {sym} "
+                            f"(conf={signal['confidence']})"
+                        )
+                else:
+                    logger.debug(
+                        f"Signal below min conf: {sym} "
+                        f"{signal['confidence']} < {min_conf}"
+                    )
 
-        # ── STATUS LOG (every 60s = 12 cycles) ──
-        if cycle % 12 == 0:
+        # ── SAVE STATE ──
+        executor.save_state()
+
+        # ── STATUS LOG (every 60s = 2 cycles) ──
+        if cycle % 2 == 0:
             s = executor.get_summary()
-            spy = data_engine.get_snapshot("SPY")
+            spy_snap = data_engine.get_snapshot("SPY")
             spy_str = ""
-            if spy:
+            if spy_snap:
+                spy_vwap = vwap_engine.get_vwap("SPY")
+                spy_touch = vwap_engine.get_touch_count("SPY")
                 spy_str = (
-                    f"SPY:${spy['price']} "
-                    f"{spy['ema_trend']} "
-                    f"RSI:{spy['rsi']:.0f} "
-                    f"VWAP:{spy['vwap_pct']:+.2f}% "
-                    f"{spy['vwap_band']}"
+                    f"SPY:${spy_snap['price']:.2f} "
+                    f"VWAP:${spy_vwap:.2f} "
+                    f"T:{spy_touch}"
                 )
-            gex_str = ""
-            g = gex_cache.get("SPY")
-            if g:
-                gex_str = f"GEX:{g['regime']}"
-            day_str   = day_class.day_type if classified else "BUILDING"
-            window_str = t_ctx.get("window", "?")
-            div_str    = ""
-            if div_cache and div_cache["type"] != "NEUTRAL":
-                div_str = f" DIV:{div_cache['type'][:4]}"
+            day_str = day_class.day_type if classified else "BUILDING"
+            gex_str = f"GEX:{risk.gex_regime}" if risk.gex_regime else ""
 
             logger.info(
                 f"[{now.strftime('%H:%M:%S')}] {spy_str} | "
-                f"{gex_str} Day:{day_str} Win:{window_str}{div_str} | "
+                f"{gex_str} Day:{day_str} VIX:{vix:.1f} | "
                 f"Open:{s['open_positions']} "
                 f"T:{s['today_trades']} "
                 f"P&L:${s['today_pnl']:+,.0f} "
-                f"Eq:${s['equity']:,.0f} "
-                f"Settled:${s['settled_cash']:,.0f}"
+                f"Eq:${s['equity']:,.0f}"
             )
 
         time.sleep(POLL_INTERVAL)

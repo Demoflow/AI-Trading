@@ -1,13 +1,12 @@
 """
-Scalper Dashboard Server
-Serves real-time view of scalper state via WebSocket.
+Scalper Dashboard Server — VWAP Stock Scalping Edition.
+Serves real-time view of stock scalper state via WebSocket.
 Reads config/paper_scalp.json + latest log + live Schwab quotes.
 """
 import sys
 import os
 import json
 import asyncio
-import glob
 from datetime import datetime, date
 from pathlib import Path
 from collections import deque
@@ -28,7 +27,7 @@ BASE_DIR = Path(__file__).parent.parent
 SCALP_FILE = BASE_DIR / "config" / "paper_scalp.json"
 LOG_DIR = BASE_DIR / "logs"
 
-app = FastAPI(title="Scalper Dashboard")
+app = FastAPI(title="VWAP Scalper Dashboard")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 
@@ -104,8 +103,8 @@ def read_market_context():
     return ctx
 
 
-def fetch_option_value(symbol):
-    """Get live mid price for an option symbol."""
+def fetch_stock_price(symbol):
+    """Get live stock price."""
     client = get_client()
     if not client:
         return None
@@ -114,10 +113,6 @@ def fetch_option_value(symbol):
         r = client.get_quote(symbol)
         if r.status_code == httpx.codes.OK:
             q = r.json().get(symbol, {}).get("quote", {})
-            bid = q.get("bidPrice", 0)
-            ask = q.get("askPrice", 0)
-            if bid > 0 and ask > 0:
-                return (bid + ask) / 2
             return q.get("lastPrice", 0)
     except Exception:
         pass
@@ -125,33 +120,34 @@ def fetch_option_value(symbol):
 
 
 def enrich_positions(positions):
-    """Add live values and P&L to open positions."""
+    """Add live values and P&L to open stock positions."""
     enriched = []
     for pos in positions:
-        csym = pos.get("contract", "")
-        qty = pos.get("qty", 0)
-        entry_cost = pos.get("entry_cost", 0)
-        structure = pos.get("structure", "LONG_OPTION")
+        symbol = pos.get("symbol", "")
+        shares = pos.get("shares", 0)
+        entry_price = pos.get("entry_price", 0)
+        direction = pos.get("direction", "LONG")
+        cost_basis = pos.get("cost_basis", 0)
 
-        current_opt = fetch_option_value(csym) if csym else None
+        current = fetch_stock_price(symbol) if symbol else None
 
-        if current_opt is not None:
-            if structure in ("NAKED_PUT", "NAKED_CALL", "CREDIT_SPREAD", "STRADDLE", "STRANGLE", "IRON_CONDOR"):
-                # Premium sells: profit = credit - buyback cost
-                credit = pos.get("credit_received", 0)
-                buyback = current_opt * qty * 100
-                pnl = credit - buyback
-                pnl_pct = pnl / credit if credit > 0 else 0
+        if current is not None and current > 0:
+            current_value = current * shares
+            if direction == "LONG":
+                pnl = (current - entry_price) * shares
             else:
-                # Long options: profit = current - entry
-                current_val = current_opt * qty * 100
-                pnl = current_val - entry_cost
-                pnl_pct = pnl / entry_cost if entry_cost > 0 else 0
+                pnl = (entry_price - current) * shares
+            # Include partial exit P&L
+            partial_pnl = sum(pe.get("pnl", 0) for pe in pos.get("partial_exits", []))
+            pnl += partial_pnl
+            pnl_pct = pnl / cost_basis if cost_basis > 0 else 0
         else:
+            current = entry_price
+            current_value = entry_price * shares
             pnl = 0
             pnl_pct = 0
 
-        # Calculate hold time
+        # Hold time
         held_min = 0
         try:
             et = datetime.fromisoformat(pos.get("entry_time", ""))
@@ -159,17 +155,23 @@ def enrich_positions(positions):
         except Exception:
             pass
 
+        # Distance from VWAP
+        vwap = pos.get("vwap_at_entry", 0)
+        vwap_dist_pct = ((current - vwap) / vwap * 100) if vwap > 0 else 0
+
         enriched.append({
             **pos,
-            "current_price": round(current_opt, 2) if current_opt else 0,
+            "current_price": round(current, 2) if current else 0,
+            "current_value": round(current_value, 2),
             "pnl": round(pnl, 2),
             "pnl_pct": round(pnl_pct * 100, 1),
             "held_minutes": round(held_min, 1),
+            "vwap_distance_pct": round(vwap_dist_pct, 2),
         })
     return enriched
 
 
-def get_latest_log_lines(n=20):
+def get_latest_log_lines(n=25):
     """Tail the most recent log file."""
     try:
         today_log = LOG_DIR / f"trading_{date.today().isoformat()}.log"
@@ -207,7 +209,7 @@ def build_snapshot():
     # Cash & equity
     cash = scalp.get("cash", 0)
     equity = scalp.get("equity", 25000)
-    deployed = sum(p.get("entry_cost", 0) for p in positions_raw)
+    deployed = sum(p.get("current_value", 0) for p in positions)
 
     market = read_market_context()
     log_lines = get_latest_log_lines(25)
@@ -218,6 +220,7 @@ def build_snapshot():
             "equity": round(equity, 2),
             "cash": round(cash, 2),
             "deployed": round(deployed, 2),
+            "buying_power": round(equity * 4 - deployed, 2),
             "today_pnl": round(daily.get("pnl", 0), 2),
             "open_pnl": round(total_pnl_open, 2),
             "trades": daily.get("trades", 0),
@@ -244,7 +247,7 @@ async def broadcast_loop():
                 await manager.broadcast(snapshot)
         except Exception as e:
             logger.error(f"Broadcast error: {e}")
-        await asyncio.sleep(2)  # Push every 2 seconds
+        await asyncio.sleep(2)
 
 
 @app.on_event("startup")
@@ -268,22 +271,20 @@ async def snapshot():
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
     try:
-        # Send initial snapshot immediately
         initial = build_snapshot()
         await ws.send_json(initial)
         while True:
-            await ws.receive_text()  # Keep alive
+            await ws.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(ws)
 
 
 if __name__ == "__main__":
     import uvicorn
-    print("=" * 60)
-    print("  SCALPER DASHBOARD")
-    print("=" * 60)
-    print("  Open: http://localhost:8888")
-    print("  Updates every 2 seconds via WebSocket")
-    print("  Reads: config/paper_scalp.json + live Schwab quotes")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  VWAP SCALPER DASHBOARD")
+    logger.info("=" * 60)
+    logger.info("  Open: http://localhost:8888")
+    logger.info("  Updates every 2 seconds via WebSocket")
+    logger.info("=" * 60)
     uvicorn.run(app, host="127.0.0.1", port=8888, log_level="warning")

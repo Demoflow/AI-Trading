@@ -1,4 +1,4 @@
-// WebSocket client for real-time scalper dashboard
+// WebSocket client for VWAP Stock Scalper Dashboard
 let ws = null;
 let reconnectTimer = null;
 
@@ -37,12 +37,12 @@ function setStatus(state) {
   dot.classList.remove("live", "idle", "error");
   if (state === "connected") {
     dot.classList.add("live");
-    text.textContent = "● LIVE";
+    text.textContent = "LIVE";
   } else if (state === "disconnected") {
-    text.textContent = "● RECONNECTING...";
+    text.textContent = "RECONNECTING...";
   } else {
     dot.classList.add("error");
-    text.textContent = "● ERROR";
+    text.textContent = "ERROR";
   }
 }
 
@@ -75,7 +75,7 @@ function colorClass(n) {
 function render(data) {
   if (data.error) {
     setStatus("error");
-    document.getElementById("statusText").textContent = `● ${data.error}`;
+    document.getElementById("statusText").textContent = data.error;
     return;
   }
 
@@ -87,16 +87,16 @@ function render(data) {
   const dot = document.getElementById("statusDot");
   if (data.status === "LIVE") {
     dot.className = "dot live";
-    document.getElementById("statusText").textContent = "● LIVE";
+    document.getElementById("statusText").textContent = "LIVE";
   } else {
     dot.className = "dot idle";
-    document.getElementById("statusText").textContent = "● IDLE";
+    document.getElementById("statusText").textContent = "IDLE";
   }
 
   // Summary
   const s = data.summary;
   document.getElementById("equity").textContent = fmtMoney(s.equity);
-  document.getElementById("cash").textContent = fmtMoney(s.cash);
+  document.getElementById("buyingPower").textContent = fmtMoney(s.buying_power);
   document.getElementById("deployed").textContent = fmtMoney(s.deployed);
 
   const todayEl = document.getElementById("todayPnl");
@@ -110,7 +110,7 @@ function render(data) {
   document.getElementById("tradeStats").textContent =
     `${s.trades} (${s.wins}W/${s.losses}L ${s.win_rate}%)`;
 
-  // Open positions
+  // Open positions — stock format
   const posEl = document.getElementById("positions");
   document.getElementById("openCount").textContent = data.positions.length;
 
@@ -120,22 +120,25 @@ function render(data) {
     posEl.innerHTML = data.positions.map(p => {
       const cls = p.pnl > 0 ? "win" : (p.pnl < 0 ? "loss" : "");
       const pnlCls = p.pnl > 0 ? "green" : (p.pnl < 0 ? "red" : "");
-      const strike = p.strike || "";
-      const direction = p.direction || "";
-      const structure = p.structure || "";
+      const dir = p.direction || "LONG";
+      const dirCls = dir === "LONG" ? "dir-long" : "dir-short";
+      const vwapDist = p.vwap_distance_pct ? `VWAP: ${p.vwap_distance_pct > 0 ? "+" : ""}${p.vwap_distance_pct.toFixed(2)}%` : "";
+      const stopDist = p.stop_price ? `Stop: $${p.stop_price.toFixed(2)}` : "";
+      const tgt = p.target_1 ? `T1: $${p.target_1.toFixed(2)}` : "";
       return `
         <div class="position ${cls}">
           <div>
-            <div class="pos-symbol">${p.symbol} ${strike} ${structure}</div>
-            <div class="pos-sub">${direction} · Entry $${(p.entry_price || 0).toFixed(2)} · Qty ${p.qty} · Held ${p.held_minutes}min</div>
+            <div class="pos-symbol">${p.symbol} <span class="${dirCls}">${dir}</span></div>
+            <div class="pos-sub">${p.shares} shares @ $${(p.entry_price || 0).toFixed(2)} | ${(p.held_minutes || 0).toFixed(0)}min</div>
+            <div class="pos-sub">${vwapDist} | ${stopDist} | ${tgt}</div>
           </div>
           <div>
             <div class="pos-sub">NOW</div>
             <div>$${(p.current_price || 0).toFixed(2)}</div>
           </div>
           <div>
-            <div class="pos-sub">COST</div>
-            <div>${fmtMoney(p.entry_cost)}</div>
+            <div class="pos-sub">VALUE</div>
+            <div>${fmtMoney(p.current_value)}</div>
           </div>
           <div class="pos-pnl ${pnlCls}">
             ${fmtMoneySigned(p.pnl)}
@@ -146,7 +149,7 @@ function render(data) {
     }).join("");
   }
 
-  // Closed today
+  // Closed today — stock format
   const closedEl = document.getElementById("closed");
   document.getElementById("closedCount").textContent = data.closed_today.length;
 
@@ -165,11 +168,13 @@ function render(data) {
           duration = `${mins.toFixed(1)}min`;
         }
       } catch (e) {}
+      const dir = t.direction || "LONG";
+      const reason = t.exit_reason || "";
       return `
         <div class="closed-item ${cls}">
           <div class="closed-time">${exitTime}</div>
           <div class="closed-result ${cls}">${isWin ? "WIN" : "LOSS"}</div>
-          <div class="closed-symbol">${t.direction || ""} ${t.symbol} ${t.structure || ""}</div>
+          <div class="closed-symbol">${dir} ${t.symbol} ${t.shares || ""}sh ${reason}</div>
           <div class="closed-pnl ${pnlCls}">${fmtMoneySigned(t.pnl || 0)}</div>
           <div class="closed-duration">${duration}</div>
         </div>
@@ -197,8 +202,7 @@ function render(data) {
     let cls = "log-line";
     if (line.includes("WARNING") || line.includes("WARN")) cls += " warning";
     else if (line.includes("ERROR")) cls += " error";
-    else if (line.includes("ENTRY") || line.includes("EXIT") || line.includes("FILLED")) cls += " info";
-    // Strip loguru prefix for cleaner display
+    else if (line.includes("Opened") || line.includes("EXIT") || line.includes("SIGNAL")) cls += " info";
     const stripped = line.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\s+\|\s+\w+\s+\|\s+[^-]+-\s+/, "");
     return `<div class="${cls}">${escapeHtml(stripped)}</div>`;
   }).join("");

@@ -280,6 +280,7 @@ class RealtimeDataEngine:
             "TSLA", "AMD", "NFLX", "PLTR", "MSTR",
             "SMH",
             "COIN", "JPM", "XOM",
+            "TQQQ", "SOXL",
         ]
         self.builders_5m = {s: CandleBuilder(5) for s in _SYMS}
         self.builders_1m = {s: CandleBuilder(1) for s in _SYMS}

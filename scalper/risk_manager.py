@@ -1,10 +1,15 @@
 """
-Scalper Risk Manager v5 - Long Options Only.
-- Long calls and puts only (no premium selling)
-- Uncapped daily trades (settled cash is the natural limit)
-- 2% of equity per trade, confidence-scaled
-- Dynamic equity sync: position size grows as account grows
-- Time-of-day gamma-aware scaling for directional
+Scalper Risk Manager v6 — Stock VWAP Scalping.
+Complete rewrite for stocks (no options/premium/Greeks).
+
+- Position sizing in SHARES and DOLLAR NOTIONAL
+- Risk per trade = shares x stop_distance_per_share
+- Aggressive growth: 1.5-2% risk per trade, confidence-scaled
+- Daily loss limit: 5% of equity (hard stop)
+- Max 3 simultaneous positions
+- Consecutive loss circuit breaker (5 straight losses)
+- State persistence to disk
+- CT timezone throughout
 """
 
 import os
@@ -22,9 +27,14 @@ except ImportError:
 _RISK_STATE_PATH = "config/scalper_risk_state.json"
 
 
+def _now_ct():
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
+
 def _hour_ct() -> float:
-    n = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+    n = _now_ct()
     return n.hour + n.minute / 60.0 + n.second / 3600.0
+
 
 FOMC_DATES = [
     "2026-01-29", "2026-03-18", "2026-05-06",
@@ -40,63 +50,46 @@ CPI_DATES = [
 
 
 class ScalperRiskManager:
+    """Stock-based risk manager for VWAP scalping."""
 
-    MAX_RISK_PER_TRADE = 0.02
-    MAX_DAILY_LOSS_PCT = 0.08
-    MAX_HOLD_MINUTES = 30    # Default; _get_directional_targets() returns time-aware value
-    MAX_OPEN_POSITIONS = 5   # Default; overridden by day type + GEX via get_max_positions()
+    MAX_DAILY_LOSS_PCT = 0.05       # 5% of equity hard stop
+    MAX_OPEN_POSITIONS = 3          # Max simultaneous stock positions
+    MAX_RISK_PER_TRADE = 0.02       # Absolute cap: 2% of equity per trade
+    CONSECUTIVE_LOSS_LIMIT = 5      # Circuit breaker
 
-    # Day-type / GEX aware position caps
-    # QUIET/CHOPPY + POSITIVE GEX: market is pinned — one position at a time.
-    _POS_CAP = {
-        ("QUIET",    "POSITIVE"): 1,
-        ("CHOPPY",   "POSITIVE"): 1,
-        ("QUIET",    "NEGATIVE"): 2,
-        ("QUIET",    "NEUTRAL"):  2,
-        ("CHOPPY",   "NEGATIVE"): 2,
-        ("CHOPPY",   "NEUTRAL"):  2,
-    }
-    # Default for TRENDING / VOLATILE (or any combo not listed above) = 5
-
-    # Minimum confidence overrides by day type
-    _MIN_CONF = {
-        "QUIET":   85,
-        "CHOPPY":  75,
-    }
-    MIN_CONF_DEFAULT = 70
-
-    LUNCH_START = 10.5
-    LUNCH_END = 13.0
-    MORNING_START = 8.5
-    MORNING_END = 10.5
-    AFTERNOON_START = 13.0
-    AFTERNOON_END = 14.5
-    POWER_HOUR_START = 14.5
-    POWER_HOUR_END = 15.0
+    # Time windows (CT)
+    MORNING_START = 8.5             # 8:30 AM CT
+    NO_TRADE_UNTIL = 9.0            # No trades first 30 min (9:00 AM CT = 10:00 AM ET)
+    LUNCH_START = 10.5              # 10:30 AM CT
+    LUNCH_END = 13.0                # 1:00 PM CT
+    EOD_CUTOFF = 15.5               # 3:30 PM CT — force close
+    MARKET_CLOSE = 15.0             # 3:00 PM CT
 
     def __init__(self, equity):
         self.equity = equity
         self.trades_today = 0
-        self.daily_pnl = 0
+        self.daily_pnl = 0.0
         self.open_positions = 0
         self.shutdown = False
         self._trade_date = date.today()
-        self.day_type = ""       # Set by main loop after classification
-        self.gex_regime = ""     # Set by main loop after GEX update
-        self._consecutive_losses = 0  # Reset to 0 on any winning trade
+        self.day_type = ""
+        self.gex_regime = ""
+        self._consecutive_losses = 0
         self._load_state()
 
+    # ── STATE PERSISTENCE ────────────────────────────────────────────────────
+
     def _load_state(self):
-        """Restore in-memory risk state from disk (survives process restarts)."""
+        """Restore risk state from disk (survives process restarts)."""
         try:
             if os.path.exists(_RISK_STATE_PATH):
                 with open(_RISK_STATE_PATH) as f:
                     s = json.load(f)
                 if s.get("date") == date.today().isoformat():
-                    self.trades_today        = s.get("trades_today", 0)
-                    self.daily_pnl           = s.get("daily_pnl", 0.0)
+                    self.trades_today = s.get("trades_today", 0)
+                    self.daily_pnl = s.get("daily_pnl", 0.0)
                     self._consecutive_losses = s.get("consecutive_losses", 0)
-                    self.shutdown            = s.get("shutdown", False)
+                    self.shutdown = s.get("shutdown", False)
                     logger.info(
                         f"Risk state restored: trades={self.trades_today} "
                         f"pnl=${self.daily_pnl:+,.2f} "
@@ -107,14 +100,14 @@ class ScalperRiskManager:
             logger.warning(f"Risk state load failed (starting fresh): {e}")
 
     def _save_state(self):
-        """Persist in-memory risk state to disk atomically."""
+        """Persist risk state to disk atomically."""
         try:
             state = {
-                "date":               self._trade_date.isoformat(),
-                "trades_today":       self.trades_today,
-                "daily_pnl":          self.daily_pnl,
+                "date": self._trade_date.isoformat(),
+                "trades_today": self.trades_today,
+                "daily_pnl": self.daily_pnl,
                 "consecutive_losses": self._consecutive_losses,
-                "shutdown":           self.shutdown,
+                "shutdown": self.shutdown,
             }
             path = Path(_RISK_STATE_PATH)
             path.parent.mkdir(exist_ok=True)
@@ -127,11 +120,13 @@ class ScalperRiskManager:
     def _reset_if_new_day(self):
         if date.today() != self._trade_date:
             self.trades_today = 0
-            self.daily_pnl = 0
+            self.daily_pnl = 0.0
             self.shutdown = False
             self._consecutive_losses = 0
             self._trade_date = date.today()
             self._save_state()
+
+    # ── TRADING WINDOW ───────────────────────────────────────────────────────
 
     def is_event_day(self):
         today = date.today().isoformat()
@@ -145,8 +140,9 @@ class ScalperRiskManager:
         return False, ""
 
     def is_trading_window(self):
+        """Check if we're in a valid trading window."""
         self._reset_if_new_day()
-        now = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+        now = _now_ct()
         if now.weekday() >= 5:
             return False, "weekend"
         h = _hour_ct()
@@ -155,71 +151,153 @@ class ScalperRiskManager:
             return False, f"wait_{etype}"
         if h < self.MORNING_START:
             return False, "pre_market"
-        if h >= self.POWER_HOUR_END:
+        if h >= self.MARKET_CLOSE:
             return False, "closed"
-        # Time-of-day window gating is handled by TimeContextFilter (time_context.py).
-        # risk_manager only enforces the outer session boundary; intra-session
-        # chop-zone confidence boosts and entry_allowed flags live in time_context.
         return True, "active"
 
+    # ── CAN TRADE ────────────────────────────────────────────────────────────
+
     def can_trade(self):
+        """Check if a new trade is allowed."""
         self._reset_if_new_day()
         if self.shutdown:
             return False, "shutdown"
+        # Daily loss limit (5% hard stop)
         if self.daily_pnl <= -(self.equity * self.MAX_DAILY_LOSS_PCT):
             self.shutdown = True
             self._save_state()
-            logger.warning(f"DAILY LOSS: ${self.daily_pnl:+,.2f}")
+            logger.warning(f"DAILY LOSS LIMIT: ${self.daily_pnl:+,.2f} (5% of ${self.equity:,.0f})")
             return False, "max_loss"
-        # Consecutive loss circuit breaker: 5 straight losses → sit out the rest of the session
-        if self._consecutive_losses >= 5:
+        # Consecutive loss circuit breaker
+        if self._consecutive_losses >= self.CONSECUTIVE_LOSS_LIMIT:
             self.shutdown = True
             self._save_state()
             logger.warning(
-                f"CONSECUTIVE LOSS LIMIT: {self._consecutive_losses} straight losses — "
-                f"sitting out rest of session to prevent runaway drawdown"
+                f"CONSECUTIVE LOSS LIMIT: {self._consecutive_losses} straight losses"
             )
             return False, "consec_loss_limit"
-        cap = self.get_max_positions(self.day_type, self.gex_regime)
-        if self.open_positions >= cap:
-            return False, f"max_open({cap})"
+        # Max open positions
+        if self.open_positions >= self.MAX_OPEN_POSITIONS:
+            return False, f"max_open({self.MAX_OPEN_POSITIONS})"
+        # Trading window
         ok, reason = self.is_trading_window()
         if not ok:
             return False, reason
         return True, "ok"
+
+    # ── EQUITY SYNC ──────────────────────────────────────────────────────────
 
     def update_equity(self, equity):
         """Sync equity so position sizing scales with account growth."""
         if equity > 0:
             self.equity = equity
 
-    def get_max_positions(self, day_type="", gex_regime=""):
-        """Return position cap based on day classification and GEX regime."""
-        return self._POS_CAP.get((day_type, gex_regime), self.MAX_OPEN_POSITIONS)
+    # ── POSITION SIZING ──────────────────────────────────────────────────────
 
-    def get_min_confidence(self, day_type=""):
-        """Return minimum signal confidence based on day classification and streak."""
-        base = self._MIN_CONF.get(day_type, self.MIN_CONF_DEFAULT)
-        # Raise the bar after 3 consecutive losses — only exceptional setups qualify
+    def get_position_size(self, symbol, price, stop_price, confidence,
+                          position_limit=None):
+        """
+        Calculate position size in shares and dollar notional.
+
+        Args:
+            symbol: ticker
+            price: entry price per share
+            stop_price: stop loss price per share
+            confidence: signal confidence (0-100)
+            position_limit: max dollar notional from StockUniverse (optional)
+
+        Returns:
+            (share_count, dollar_notional) tuple, or (0, 0) if trade rejected.
+        """
+        if price <= 0 or stop_price <= 0:
+            return 0, 0.0
+
+        # Determine risk per trade based on confidence
+        if confidence >= 85:
+            risk_pct = 0.020  # 2.0% of equity (full aggressive)
+        elif confidence >= 75:
+            risk_pct = 0.015  # 1.5% of equity
+        elif confidence >= 65:
+            risk_pct = 0.010  # 1.0% of equity
+        else:
+            return 0, 0.0     # Below minimum — skip
+
+        # Hard cap at MAX_RISK_PER_TRADE (2%)
+        risk_pct = min(risk_pct, self.MAX_RISK_PER_TRADE)
+
+        # Dollar risk budget for this trade
+        dollar_risk = self.equity * risk_pct
+
+        # Stop distance per share
+        stop_distance = abs(price - stop_price)
+        if stop_distance <= 0:
+            return 0, 0.0
+
+        # Shares = risk budget / risk per share
+        share_count = int(dollar_risk / stop_distance)
+        if share_count < 1:
+            return 0, 0.0
+
+        dollar_notional = share_count * price
+
+        # Apply position limit from StockUniverse
+        if position_limit and dollar_notional > position_limit:
+            share_count = int(position_limit / price)
+            dollar_notional = share_count * price
+
+        # Verify the actual risk doesn't exceed 2% of equity
+        actual_risk = share_count * stop_distance
+        if actual_risk > self.equity * self.MAX_RISK_PER_TRADE:
+            share_count = int(self.equity * self.MAX_RISK_PER_TRADE / stop_distance)
+            dollar_notional = share_count * price
+
+        if share_count < 1:
+            return 0, 0.0
+
+        return share_count, round(dollar_notional, 2)
+
+    def get_dollar_risk(self, share_count, price, stop_price):
+        """Calculate the dollar amount at risk for a position."""
+        stop_distance = abs(price - stop_price)
+        return round(share_count * stop_distance, 2)
+
+    def get_share_count(self, symbol, price, stop_price, confidence,
+                        position_limit=None):
+        """Convenience wrapper: returns just share count."""
+        shares, _ = self.get_position_size(symbol, price, stop_price,
+                                           confidence, position_limit)
+        return shares
+
+    # ── MIN CONFIDENCE THRESHOLDS ────────────────────────────────────────────
+
+    def get_min_confidence(self, day_type="", symbol_tier=1):
+        """
+        Return minimum signal confidence based on day type and loss streak.
+        Symbol tier minimums are enforced by StockUniverse.get_min_confidence().
+        """
+        if day_type == "QUIET":
+            base = 85
+        elif day_type == "CHOPPY":
+            base = 78
+        elif day_type == "RANGE_BOUND":
+            base = 75
+        else:
+            base = 70
+
+        # Raise bar after 3 consecutive losses
         if self._consecutive_losses >= 3:
             base += 15
             logger.debug(
-                f"Consecutive loss boost active ({self._consecutive_losses} in a row): "
+                f"Streak boost active ({self._consecutive_losses} losses): "
                 f"min_conf now {base}"
             )
+
         return base
 
-    def get_position_size(self, conf):
-        base = self.equity * self.MAX_RISK_PER_TRADE
-        if conf >= 85:
-            return round(base, 2)
-        elif conf >= 75:
-            return round(base * 0.75, 2)
-        elif conf >= 65:
-            return round(base * 0.50, 2)
-        return round(base * 0.35, 2)
+    # ── TRADE RECORDING ──────────────────────────────────────────────────────
 
     def record_trade(self, pnl=0):
+        """Record a completed trade result."""
         self.trades_today += 1
         self.daily_pnl += pnl
         if pnl < 0:
@@ -227,7 +305,7 @@ class ScalperRiskManager:
             if self._consecutive_losses >= 3:
                 logger.warning(
                     f"Streak: {self._consecutive_losses} consecutive losses "
-                    f"(${pnl:+,.2f}) — raising min confidence"
+                    f"(${pnl:+,.2f})"
                 )
         else:
             if self._consecutive_losses > 0:
@@ -235,91 +313,10 @@ class ScalperRiskManager:
             self._consecutive_losses = 0
         self._save_state()
 
-    def check_exit(self, position, current_value):
-        """
-        Exit logic for long calls and puts.
-        Returns (should_exit, reason, action)
-        """
-        return self._exit_directional(position, current_value)
+    # ── MAX POSITIONS ────────────────────────────────────────────────────────
 
-    def _get_directional_targets(self):
-        """
-        Time-of-day aware targets for long options.
-        Returns: (profit_target, stop_loss, trail_start, trail_pct, breakeven_trigger, max_hold_min)
-
-        All windows target ~2.5:1 R:R (profit / stop).
-        Stops tighten as theta decay accelerates through the day.
-        """
-        h = _hour_ct()
-        #                    profit  stop  trail_start  trail_pct  be_trigger  max_hold
-        if h < 10.0:       # Opening — wider gamma range, 30 min hold OK
-            return          0.50,   0.20,   0.12,        0.10,      0.20,       30
-        elif h < 13.0:     # First pullback + chop zone
-            return          0.40,   0.15,   0.10,        0.08,      0.18,       25
-        elif h < 14.0:     # Post-lunch directional
-            return          0.30,   0.12,   0.08,        0.07,      0.15,       20
-        else:              # Gamma zone — theta accelerating, exit fast
-            return          0.25,   0.10,   0.07,        0.06,      0.12,       15
-
-    def _exit_directional(self, pos, current_value):
-        """
-        Exit logic for long options (calls/puts).
-
-        Priority order:
-          1. Full profit target
-          2. Hard stop loss
-          3. Breakeven stop — once peak exceeded be_trigger, never fall below +2%
-          4. Trailing stop — activates at trail_start gain, fires trail_pct below peak
-          5. Time stop — time-of-day aware max hold
-          6. Closing gate — exits before EOD force-close window
-        """
-        entry_cost = pos.get("entry_cost", 0)
-        entry_time = pos.get("entry_time")
-        if entry_cost <= 0:
-            return False, "no_data", None
-
-        pnl_pct = (current_value - entry_cost) / entry_cost
-        profit_t, stop_t, trail_start, trail_pct, be_trigger, max_hold = (
-            self._get_directional_targets()
-        )
-
-        # 1. Full profit target
-        if pnl_pct >= profit_t:
-            return True, f"profit_{pnl_pct:+.0%}", None
-
-        # 2. Hard stop loss
-        if pnl_pct <= -stop_t:
-            return True, f"stop_{pnl_pct:+.0%}", None
-
-        # 3. Breakeven stop: once the position peaked above be_trigger,
-        #    never let it fall back below +2% (protect meaningful gains)
-        peak = pos.get("peak_value", current_value)
-        if entry_cost > 0 and peak > 0:
-            peak_pct = (peak - entry_cost) / entry_cost
-            if peak_pct >= be_trigger and pnl_pct <= 0.02:
-                return True, f"breakeven_{pnl_pct:+.0%}", None
-
-            # 4. Trailing stop: activates at trail_start gain,
-            #    fires if position retreats trail_pct below its peak
-            if pnl_pct >= trail_start:
-                from_peak = (current_value - peak) / peak
-                if from_peak <= -trail_pct:
-                    return True, f"trail_{from_peak:+.0%}", None
-
-        # 5. Time stop (tightens later in the day as theta accelerates)
-        if entry_time:
-            if isinstance(entry_time, str):
-                entry_time = datetime.fromisoformat(entry_time)
-            now_dt = datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
-            if entry_time.tzinfo is None and now_dt.tzinfo is not None:
-                entry_time = entry_time.replace(tzinfo=_CT_TZ)
-            mins = (now_dt - entry_time).total_seconds() / 60
-            if mins >= max_hold:
-                return True, f"time_{mins:.0f}min", None
-
-        # 6. Closing gate — align with EOD force-close at 2:45 PM CT
-        h = _hour_ct()
-        if h >= 14.75:
-            return True, "closing", None
-
-        return False, "hold", None
+    def get_max_positions(self, day_type="", gex_regime=""):
+        """Return position cap based on day type."""
+        if day_type in ("QUIET", "CHOPPY"):
+            return 2
+        return self.MAX_OPEN_POSITIONS
