@@ -107,6 +107,42 @@ class CandleBuilder:
         for c in candles:
             self.candles.append(c)
 
+    def ingest_candle(self, candle):
+        """
+        Merge a pre-built OHLCV candle (e.g. from the streaming client) into
+        the current bar, properly preserving high/low/open/close/volume.
+        Used by StreamingDataEngine to feed exchange 1-min candles.
+
+        Returns the just-completed bar if a new block started, else None.
+        """
+        dt = candle.get("time")
+        if dt is None:
+            dt = _now_ct()
+        block = self._get_block(dt)
+
+        if self._current_block != block:
+            completed = None
+            if self._current is not None:
+                self.candles.append(self._current)
+                completed = self._current
+            self._current = {
+                "time":   dt,
+                "open":   candle["open"],
+                "high":   candle["high"],
+                "low":    candle["low"],
+                "close":  candle["close"],
+                "volume": candle.get("volume", 0),
+            }
+            self._current_block = block
+            return completed
+        else:
+            if self._current:
+                self._current["high"]   = max(self._current["high"],  candle["high"])
+                self._current["low"]    = min(self._current["low"],   candle["low"])
+                self._current["close"]  = candle["close"]
+                self._current["volume"] += candle.get("volume", 0)
+            return None
+
 
 class Indicators:
 
@@ -500,3 +536,136 @@ class RealtimeDataEngine:
             "trend": trend, "momentum": momentum,
             "current_candle": current,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# StreamingDataEngine — drop-in replacement for RealtimeDataEngine that uses
+# the Schwab WebSocket stream instead of sequential REST polling.
+#
+# Same public interface: poll(), get_snapshot(), get_entry_snapshot(),
+# seed_history(), builders_5m, builders_1m.
+#
+# Additions:
+#   start_stream()          — connect WebSocket (call after construction)
+#   get_latest_price(sym)   — sub-second price from L1 cache
+#   is_streaming            — True while WebSocket is connected
+# ─────────────────────────────────────────────────────────────────────────────
+
+class StreamingDataEngine(RealtimeDataEngine):
+    """
+    Streaming-backed data engine.
+
+    1-min exchange candles arrive via WebSocket → fed into builders_1m (exact)
+    and aggregated into builders_5m (by 5-min block).
+    L1 quotes update a low-latency price cache for exit checking.
+
+    poll() drains pending candles and returns latest prices — no HTTP calls.
+    """
+
+    def __init__(self, schwab_client):
+        super().__init__(schwab_client)
+        self._stream_client = None
+        self._is_streaming  = False
+        # Per-symbol prev L1 volume for delta tracking (live candle updates)
+        self._l1_prev_vol   = {s: 0 for s in self.builders_5m}
+
+    @property
+    def is_streaming(self) -> bool:
+        return self._is_streaming and (
+            self._stream_client is not None and self._stream_client.is_connected
+        )
+
+    def start_stream(self, symbols: list = None) -> bool:
+        """
+        Connect the WebSocket stream. Call once after construction.
+
+        symbols: override list; defaults to all symbols tracked by builders.
+        Returns True if connected successfully.
+        """
+        from scalper.stream_data import StreamDataClient
+
+        watch = symbols or list(self.builders_5m.keys())
+        self._stream_client = StreamDataClient(self.client, watch)
+        ok = self._stream_client.start(timeout=12.0)
+        self._is_streaming = ok
+        if ok:
+            logger.info(
+                f"StreamingDataEngine: stream active | "
+                f"{len(watch)} symbols | REST polling disabled"
+            )
+        else:
+            logger.warning(
+                "StreamingDataEngine: stream failed — will fall back to REST poll()"
+            )
+        return ok
+
+    def get_latest_price(self, symbol: str):
+        """
+        Return the latest known price for symbol.
+        Uses stream L1 cache if connected, falls back to candle close.
+        Returns None if no data at all.
+        """
+        if self._stream_client and self._is_streaming:
+            q = self._stream_client.get_quote(symbol)
+            p = q.get("price")
+            if p and p > 0:
+                return float(p)
+        # Fallback: last close from 1m builder
+        b = self.builders_1m.get(symbol)
+        if b:
+            cur = b.get_current()
+            if cur:
+                return cur["close"]
+        return None
+
+    def poll(self):
+        """
+        Drain pending 1-min candles from stream into builders.
+        Returns latest quote dict in same format as RealtimeDataEngine.poll().
+        Falls back to REST polling if stream is not connected.
+        """
+        if not (self._stream_client and self._stream_client.is_connected):
+            # Stream down — use parent REST implementation
+            return super().poll()
+
+        results = {}
+
+        for sym in self.builders_5m:
+            # ── Ingest completed 1-min exchange candles ──
+            new_candles = self._stream_client.drain_new_candles(sym)
+            for c in new_candles:
+                # Feed to 1-min builder (exact exchange candle)
+                self.builders_1m[sym].ingest_candle(c)
+                # Feed to 5-min builder (aggregates by block)
+                completed_5m = self.builders_5m[sym].ingest_candle(c)
+                if completed_5m:
+                    self._session_candles[sym].append(completed_5m)
+
+            # ── Latest L1 quote for result dict ──
+            q = self._stream_client.get_quote(sym)
+            price = q.get("price", 0)
+            if price and price > 0:
+                # Live update current 5-min candle with latest L1 price + vol delta
+                total_vol = q.get("volume", 0)
+                prev_vol  = self._l1_prev_vol.get(sym, 0)
+                vol_delta = max(int(total_vol) - prev_vol, 0) if total_vol else 0
+                if vol_delta > 0:
+                    self._l1_prev_vol[sym] = int(total_vol)
+                    # Only update the "current" open candle — do not ingest as a
+                    # completed candle; just refresh close/high/low in-place.
+                    cur5 = self.builders_5m[sym].get_current()
+                    if cur5:
+                        cur5["high"]  = max(cur5["high"],  price)
+                        cur5["low"]   = min(cur5["low"],   price)
+                        cur5["close"] = price
+                        cur5["volume"] = cur5.get("volume", 0) + vol_delta
+
+                results[sym] = {
+                    "price":   price,
+                    "bid":     q.get("bid", 0),
+                    "ask":     q.get("ask", 0),
+                    "volume":  q.get("volume", 0),
+                    "net_pct": q.get("net_pct", 0),
+                }
+
+        return results

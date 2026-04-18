@@ -103,8 +103,22 @@ def _release_lock(lock_path):
         pass
 
 
-def get_stock_quote(client, symbol):
-    """Get current stock price from Schwab."""
+def get_stock_quote(client, symbol, data_engine=None):
+    """
+    Get current stock price.
+    Prefers streaming L1 cache (sub-second) over REST (30s latency).
+    Falls back to REST if stream is unavailable.
+    """
+    # Fast path: streaming L1 cache
+    if data_engine is not None:
+        try:
+            p = data_engine.get_latest_price(symbol)
+            if p and p > 0:
+                return p, None   # volume not needed for exit checks
+        except Exception:
+            pass
+
+    # Fallback: REST API
     try:
         import httpx
         resp = client.get_quote(symbol)
@@ -148,7 +162,7 @@ def run():
         return
 
     # ── INITIALIZE COMPONENTS ──
-    from scalper.realtime_data    import RealtimeDataEngine
+    from scalper.realtime_data    import RealtimeDataEngine, StreamingDataEngine
     from scalper.vwap_engine      import VWAPEngine
     from scalper.stock_universe   import StockUniverse
     from scalper.signal_engine    import ScalperSignal
@@ -161,7 +175,18 @@ def run():
 
     stock_universe = StockUniverse()
     vwap_engine    = VWAPEngine()
-    data_engine    = RealtimeDataEngine(client)
+
+    # ── DATA ENGINE: prefer WebSocket streaming, fall back to REST polling ──
+    _streaming_engine = StreamingDataEngine(client)
+    logger.info("Connecting Schwab WebSocket stream...")
+    _stream_ok = _streaming_engine.start_stream()
+    if _stream_ok:
+        data_engine = _streaming_engine
+        logger.info("Data engine: STREAMING (1-min exchange candles, sub-second quotes)")
+    else:
+        data_engine = RealtimeDataEngine(client)
+        logger.warning("Data engine: REST POLLING (30s latency — stream unavailable)")
+
     signals        = ScalperSignal()
     executor       = ScalperExecutor(SCALP_EQUITY)
     risk           = ScalperRiskManager(executor.portfolio.get("equity", SCALP_EQUITY))
@@ -254,7 +279,7 @@ def run():
         if _ov.get("flatten_all"):
             logger.warning("[Agent] FLATTEN ALL — closing all positions")
             for pos in executor.get_open_positions():
-                price, _ = get_stock_quote(client, pos["symbol"])
+                price, _ = get_stock_quote(client, pos["symbol"], data_engine)
                 if price:
                     result = executor.close_position(pos["id"], price, "agent_flatten")
                     if result["status"] == "CLOSED":
@@ -274,11 +299,11 @@ def run():
                 logger.warning(f"3:30 PM CT FORCE CLOSE: {len(open_pos)} positions")
                 for pos in open_pos:
                     try:
-                        price, _ = get_stock_quote(client, pos["symbol"])
+                        price, _ = get_stock_quote(client, pos["symbol"], data_engine)
                         if not price:
                             # Retry once after short delay
                             time.sleep(1)
-                            price, _ = get_stock_quote(client, pos["symbol"])
+                            price, _ = get_stock_quote(client, pos["symbol"], data_engine)
                         if not price:
                             # Use last known price as fallback for EOD close
                             price = pos.get("current_price", pos.get("entry_price", 0))
@@ -305,7 +330,7 @@ def run():
                 if open_pos:
                     logger.warning(f"EOD safety close: {len(open_pos)} positions")
                     for pos in open_pos:
-                        price, _ = get_stock_quote(client, pos["symbol"])
+                        price, _ = get_stock_quote(client, pos["symbol"], data_engine)
                         if not price:
                             price = pos.get("current_price", pos.get("entry_price", 0))
                         if price:
@@ -433,7 +458,7 @@ def run():
         # ── CHECK EXITS FOR ALL OPEN POSITIONS ──
         for pos in executor.get_open_positions():
             try:
-                price, _ = get_stock_quote(client, pos["symbol"])
+                price, _ = get_stock_quote(client, pos["symbol"], data_engine)
                 if price is None:
                     continue
 
