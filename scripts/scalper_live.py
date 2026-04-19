@@ -195,6 +195,9 @@ def run():
     gex            = IntradayGEX(client)
     internals      = MarketInternals(client)
 
+    # Single VWAP source: snapshots use VWAPEngine values, not a separate recalculation
+    data_engine.set_vwap_engine(vwap_engine)
+
     # ── STARTUP TASKS ──
     risk.update_equity(executor.portfolio.get("equity", SCALP_EQUITY))
 

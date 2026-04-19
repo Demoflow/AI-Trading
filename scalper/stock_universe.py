@@ -173,15 +173,24 @@ class StockUniverse:
     def get_stop_distance_pct(self, symbol):
         """
         Returns stop distance as a percentage of price.
-        Based on implied daily move: roughly 8% of expected daily range.
-        Clamped to [0.08%, 0.35%].
+        Tier 1: implied_move × 0.10, clamped [0.08%, 0.40%]
+        Tier 2-3: implied_move × 0.12, clamped [0.10%, 0.50%]
+
+        The higher multiplier for Tier 2-3 prevents premature stop-outs on
+        volatile names (NVDA at Tier 1 excluded by design; AMD/TSLA/SOXL need
+        wider stops to absorb intraday noise without exiting winning trades).
         """
         info = self.universe.get(symbol)
         if not info:
             return 0.15  # Conservative default
 
-        raw = info["implied_move_pct"] * 0.08
-        return max(0.08, min(raw, 0.35))
+        tier = info["tier"]
+        if tier == 1:
+            raw = info["implied_move_pct"] * 0.10
+            return max(0.08, min(raw, 0.40))
+        else:
+            raw = info["implied_move_pct"] * 0.12
+            return max(0.10, min(raw, 0.50))
 
     # ── SYMBOL SCORING ───────────────────────────────────────────────────────
 

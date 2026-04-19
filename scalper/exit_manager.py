@@ -1,15 +1,18 @@
 """
-Exit Manager v1.0 — Dedicated exit logic for VWAP stock scalping.
+Exit Manager v2.0 — Dedicated exit logic for VWAP stock scalping.
 
 Exit priority:
   1. VWAP break stop
   2. Hard price stop
-  3. Full profit target (SD2)
+  3. Second partial profit (SD2) — sell 50% of remaining (requires SD1 already taken)
   4. Partial profit (SD1) — sell 50%
-  5. Breakeven stop (lock in after 0.5% move)
-  6. Trailing stop (0.25% trail after 0.4% gain)
+  5. Breakeven stop (lock in after volatility-scaled threshold)
+  6. Trailing stop (volatility-scaled trail, activation >= 1.5x trail distance)
   7. Time stop (time-of-day aware)
   8. EOD gate (3:30 PM CT hard close)
+
+After SD1 + SD2 partials, the remaining 25% of the position rides with the
+trailing stop only — allowing outsized gains on the best trades.
 
 All times in CT.
 """
@@ -86,6 +89,13 @@ class ExitManager:
             max(implied_move * 0.12, self.TRAIL_DISTANCE),
             self.TRAIL_DISTANCE_MAX,
         )
+        # Trail activation must be at least 1.5× the trail distance so the stop
+        # can never trigger at a net loss after first reaching the activation point.
+        trail_activation = max(self.TRAIL_ACTIVATION, trail_distance * 1.5)
+
+        # Breakeven trigger scales with volatility: tight names (SPY) stay at 0.5%,
+        # volatile names (NVDA, TSLA) require a larger gain before locking breakeven.
+        breakeven_trigger = max(self.BREAKEVEN_TRIGGER, implied_move * 0.25)
 
         # Calculate gain/loss percentage
         if direction == "LONG":
@@ -96,6 +106,8 @@ class ExitManager:
             gain_pct = (entry_price - current_price) / entry_price if entry_price > 0 else 0
             peak_gain_pct = (entry_price - peak_price) / entry_price if entry_price > 0 else 0
             from_peak_pct = (peak_price - current_price) / peak_price if peak_price > 0 else 0
+
+        partial_count = len(position.get("partial_exits", []))
 
         # ── 1. VWAP BREAK STOP ──
         if vwap_engine:
@@ -114,30 +126,33 @@ class ExitManager:
         elif direction == "SHORT" and current_price >= stop_price:
             return True, f"hard_stop(${stop_price:.2f})", "FULL_EXIT"
 
-        # ── 3. FULL PROFIT TARGET (SD2) ──
-        if target_2 > 0:
+        # ── 3. SECOND PARTIAL PROFIT (SD2) — sell 50% of remaining, trail the rest ──
+        # Requires SD1 already taken (partial_count == 1). The final ~25% of the
+        # original position then rides with the trailing stop for maximum upside.
+        if partial_count == 1 and target_2 > 0 and shares > 1:
             if direction == "LONG" and current_price >= target_2:
-                return True, f"target_2(${target_2:.2f})", "FULL_EXIT"
+                return True, f"target_2_partial(${target_2:.2f})", "HALF_EXIT"
             elif direction == "SHORT" and current_price <= target_2:
-                return True, f"target_2(${target_2:.2f})", "FULL_EXIT"
+                return True, f"target_2_partial(${target_2:.2f})", "HALF_EXIT"
 
         # ── 4. PARTIAL PROFIT (SD1) — sell 50% ──
-        has_partial = len(position.get("partial_exits", [])) > 0
-        if not has_partial and target_1 > 0 and shares > 1:
+        if partial_count == 0 and target_1 > 0 and shares > 1:
             if direction == "LONG" and current_price >= target_1:
                 return True, f"target_1(${target_1:.2f})", "HALF_EXIT"
             elif direction == "SHORT" and current_price <= target_1:
                 return True, f"target_1(${target_1:.2f})", "HALF_EXIT"
 
         # ── 5. BREAKEVEN STOP ──
-        # Once peak gain >= 0.5%, don't let position fall back below entry + 0.05%
-        if peak_gain_pct >= self.BREAKEVEN_TRIGGER:
+        # Trigger threshold scales with volatility: NVDA needs ~0.875% gain before
+        # locking breakeven so normal noise doesn't knock it out too early.
+        if peak_gain_pct >= breakeven_trigger:
             if gain_pct <= self.BREAKEVEN_FLOOR:
                 return True, f"breakeven(peak={peak_gain_pct:+.2%})", "FULL_EXIT"
 
         # ── 6. TRAILING STOP ──
-        # Once gain >= 0.4%, trail with volatility-scaled distance from peak
-        if gain_pct >= self.TRAIL_ACTIVATION:
+        # Activation is max(0.4%, trail_distance × 1.5) — guarantees the trail
+        # can never trigger at a net loss after reaching the activation point.
+        if gain_pct >= trail_activation:
             if from_peak_pct <= -trail_distance:
                 return True, f"trail({from_peak_pct:+.2%}_from_peak)", "FULL_EXIT"
 

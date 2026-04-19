@@ -331,6 +331,12 @@ class RealtimeDataEngine:
         self._session_candles = {s: [] for s in _SYMS}
         # Track previous totalVolume per symbol for delta calculation
         self._prev_total_volume = {s: 0 for s in _SYMS}
+        # Single VWAP source — set via set_vwap_engine() after startup
+        self._vwap_engine = None
+
+    def set_vwap_engine(self, vwap_engine):
+        """Wire up VWAPEngine as the single VWAP source for snapshots."""
+        self._vwap_engine = vwap_engine
 
     def seed_history(self):
         """
@@ -463,7 +469,12 @@ class RealtimeDataEngine:
         ema9_slope = self.indicators.ema_slope(closes, period=9, lookback=3)
 
         all_c = builder.get_all_candles()
-        vwap, v1u, v1d, v2u, v2d = self.indicators.vwap_with_bands(all_c)
+        # Use the live VWAPEngine as the single VWAP source when available.
+        # Fall back to candle-only recalculation only if engine not wired up yet.
+        if self._vwap_engine and self._vwap_engine.get_vwap(symbol) > 0:
+            vwap, v1u, v1d, v2u, v2d = self._vwap_engine.get_bands(symbol)
+        else:
+            vwap, v1u, v1d, v2u, v2d = self.indicators.vwap_with_bands(all_c)
         rsi = self.indicators.rsi(closes)
         macd_l, macd_s, macd_h = self.indicators.macd(closes)
         atr = self.indicators.atr(highs, lows, closes)

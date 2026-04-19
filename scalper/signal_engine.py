@@ -136,8 +136,9 @@ class ScalperSignal:
             # Use proxy VWAP for leveraged ETFs
             vwap_symbol = stock_universe.get_vwap_proxy(symbol)
 
-            # Get candles for signal detection
-            builder = data_engine.builders_5m.get(vwap_symbol)
+            # Get candles for signal detection — use 1-min for fast, low-latency detection.
+            # 5-min timeframe is used only for directional bias (via get_snapshot).
+            builder = data_engine.builders_1m.get(vwap_symbol)
             if not builder:
                 continue
             candles = builder.get_all_candles()
@@ -165,6 +166,23 @@ class ScalperSignal:
             )
 
             if not signal:
+                continue
+
+            # ── TREND CONFIRMATION GATE ──
+            # Don't enter long into a bearish 5-min trend, or short into a bullish one.
+            # snap is already fetched above (5-min snapshot for directional bias).
+            snap_trend = snap.get("trend", "NEUTRAL")
+            if signal["direction"] == "LONG" and snap_trend == "BEARISH":
+                logger.debug(
+                    f"FILTERED {symbol} LONG — 5m trend BEARISH "
+                    f"(ema9<ema21, price<vwap)"
+                )
+                continue
+            if signal["direction"] == "SHORT" and snap_trend == "BULLISH":
+                logger.debug(
+                    f"FILTERED {symbol} SHORT — 5m trend BULLISH "
+                    f"(ema9>ema21, price>vwap)"
+                )
                 continue
 
             # Override symbol and entry price to the actual trading symbol
