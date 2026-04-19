@@ -19,20 +19,26 @@ from loguru import logger
 
 UNIVERSE = {
     # Tier 1 — Primary (trade every day)
-    "SPY":   {"tier": 1, "implied_move_pct": 0.85, "vwap_score": 95, "inst_own": 0.95, "adv_shares": 70_000_000, "vwap_proxy": None},
-    "QQQ":   {"tier": 1, "implied_move_pct": 1.10, "vwap_score": 92, "inst_own": 0.90, "adv_shares": 45_000_000, "vwap_proxy": None},
-    "NVDA":  {"tier": 1, "implied_move_pct": 3.50, "vwap_score": 82, "inst_own": 0.65, "adv_shares": 50_000_000, "vwap_proxy": None},
-    "META":  {"tier": 1, "implied_move_pct": 2.20, "vwap_score": 88, "inst_own": 0.80, "adv_shares": 20_000_000, "vwap_proxy": None},
-    "AAPL":  {"tier": 1, "implied_move_pct": 1.40, "vwap_score": 90, "inst_own": 0.60, "adv_shares": 60_000_000, "vwap_proxy": None},
+    "SPY":   {"tier": 1, "implied_move_pct": 0.85, "vwap_score": 95, "inst_own": 0.95, "adv_shares": 70_000_000, "vwap_proxy": None, "trending_only": False},
+    "QQQ":   {"tier": 1, "implied_move_pct": 1.10, "vwap_score": 92, "inst_own": 0.90, "adv_shares": 45_000_000, "vwap_proxy": None, "trending_only": False},
+    "NVDA":  {"tier": 1, "implied_move_pct": 3.50, "vwap_score": 82, "inst_own": 0.65, "adv_shares": 50_000_000, "vwap_proxy": None, "trending_only": False},
+    "META":  {"tier": 1, "implied_move_pct": 2.20, "vwap_score": 88, "inst_own": 0.80, "adv_shares": 20_000_000, "vwap_proxy": None, "trending_only": False},
+    "AAPL":  {"tier": 1, "implied_move_pct": 1.40, "vwap_score": 90, "inst_own": 0.60, "adv_shares": 60_000_000, "vwap_proxy": None, "trending_only": False},
     # Tier 2 — Secondary (trade on trending/volatile days)
-    "MSFT":  {"tier": 2, "implied_move_pct": 1.20, "vwap_score": 88, "inst_own": 0.72, "adv_shares": 25_000_000, "vwap_proxy": None},
-    "GOOGL": {"tier": 2, "implied_move_pct": 1.50, "vwap_score": 85, "inst_own": 0.60, "adv_shares": 25_000_000, "vwap_proxy": None},
-    "AMZN":  {"tier": 2, "implied_move_pct": 1.80, "vwap_score": 83, "inst_own": 0.60, "adv_shares": 40_000_000, "vwap_proxy": None},
+    "MSFT":  {"tier": 2, "implied_move_pct": 1.20, "vwap_score": 88, "inst_own": 0.72, "adv_shares": 25_000_000, "vwap_proxy": None, "trending_only": False},
+    "GOOGL": {"tier": 2, "implied_move_pct": 1.50, "vwap_score": 85, "inst_own": 0.60, "adv_shares": 25_000_000, "vwap_proxy": None, "trending_only": False},
+    "AMZN":  {"tier": 2, "implied_move_pct": 1.80, "vwap_score": 83, "inst_own": 0.60, "adv_shares": 40_000_000, "vwap_proxy": None, "trending_only": False},
+    "AMD":   {"tier": 2, "implied_move_pct": 3.00, "vwap_score": 78, "inst_own": 0.70, "adv_shares": 50_000_000, "vwap_proxy": None, "trending_only": False},
+    "IWM":   {"tier": 2, "implied_move_pct": 1.50, "vwap_score": 88, "inst_own": 0.85, "adv_shares": 32_000_000, "vwap_proxy": None, "trending_only": False},
+    "XLF":   {"tier": 2, "implied_move_pct": 1.20, "vwap_score": 88, "inst_own": 0.92, "adv_shares": 45_000_000, "vwap_proxy": None, "trending_only": False},
+    # Tier 2 — Trending-only (directional conviction required)
+    "XLE":   {"tier": 2, "implied_move_pct": 1.50, "vwap_score": 85, "inst_own": 0.90, "adv_shares": 28_000_000, "vwap_proxy": None, "trending_only": True},
+    "AVGO":  {"tier": 2, "implied_move_pct": 2.50, "vwap_score": 80, "inst_own": 0.80, "adv_shares": 18_000_000, "vwap_proxy": None, "trending_only": True},
     # Tier 3 — High vol, low VWAP reliability
-    "TSLA":  {"tier": 3, "implied_move_pct": 4.50, "vwap_score": 58, "inst_own": 0.44, "adv_shares": 80_000_000, "vwap_proxy": None},
+    "TSLA":  {"tier": 3, "implied_move_pct": 4.50, "vwap_score": 58, "inst_own": 0.44, "adv_shares": 80_000_000, "vwap_proxy": None, "trending_only": False},
     # ETF Volatility Plays (VIX > 20)
-    "TQQQ":  {"tier": 2, "implied_move_pct": 3.30, "vwap_score": 75, "inst_own": 0.70, "adv_shares": 60_000_000, "vwap_proxy": "QQQ"},
-    "SOXL":  {"tier": 2, "implied_move_pct": 5.00, "vwap_score": 70, "inst_own": 0.65, "adv_shares": 30_000_000, "vwap_proxy": "SMH"},
+    "TQQQ":  {"tier": 2, "implied_move_pct": 3.30, "vwap_score": 75, "inst_own": 0.70, "adv_shares": 60_000_000, "vwap_proxy": "QQQ",  "trending_only": False},
+    "SOXL":  {"tier": 2, "implied_move_pct": 5.00, "vwap_score": 70, "inst_own": 0.65, "adv_shares": 30_000_000, "vwap_proxy": "SMH",  "trending_only": False},
 }
 
 
@@ -99,6 +105,9 @@ class StockUniverse:
         if day_type in ("TRENDING", "VOLATILE", "UNKNOWN"):
             for sym, info in self.universe.items():
                 if info["tier"] == 2 and sym not in ("TQQQ", "SOXL"):
+                    # Trending-only symbols require explicit directional day
+                    if info.get("trending_only") and day_type != "TRENDING":
+                        continue
                     if sym not in active:
                         active.append(sym)
 

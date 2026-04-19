@@ -52,6 +52,7 @@ class ExitManager:
         "SPY": 0.0085, "QQQ": 0.011, "AAPL": 0.014, "MSFT": 0.012,
         "NVDA": 0.035, "META": 0.022, "AMZN": 0.018, "GOOGL": 0.015,
         "TSLA": 0.045, "TQQQ": 0.033, "SOXL": 0.050,
+        "AMD": 0.030, "IWM": 0.015, "XLF": 0.012, "XLE": 0.015, "AVGO": 0.025,
     }
 
     def check_exit(self, position, current_price, vwap_engine=None):

@@ -317,8 +317,9 @@ class RealtimeDataEngine:
         _SYMS = [
             "SPY", "QQQ", "IWM",
             "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
-            "TSLA", "AMD", "NFLX", "PLTR", "MSTR",
+            "TSLA", "AMD", "AVGO", "NFLX", "PLTR", "MSTR",
             "SMH",
+            "XLF", "XLE",
             "COIN", "JPM", "XOM",
             "TQQQ", "SOXL",
         ]
