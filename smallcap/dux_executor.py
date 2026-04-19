@@ -109,6 +109,57 @@ class DuxExecutor:
         if self._paper:
             logger.info("[DuxExec] Paper simulation mode — no real orders will be sent")
 
+        # Restore any positions that survived a restart
+        self._load_positions()
+
+    # ── POSITION PERSISTENCE ───────────────────────────────────────────────────
+
+    def _positions_path(self):
+        from pathlib import Path
+        return Path(__file__).parent.parent / "config" / "dux_positions.json"
+
+    def _save_positions(self):
+        """Atomically persist open position tracker state."""
+        import json
+        from pathlib import Path
+        try:
+            data = {sym: t.to_dict() for sym, t in self._positions.items()}
+            path = self._positions_path()
+            path.parent.mkdir(exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.replace(path)
+        except Exception as e:
+            logger.warning(f"[DuxExec] Position save failed: {e}")
+
+    def _load_positions(self):
+        """Restore open positions from disk on startup."""
+        import json
+        from datetime import date
+        path = self._positions_path()
+        if not path.exists():
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            restored = 0
+            for sym, d in data.items():
+                try:
+                    t = _DuxTracker.from_dict(d)
+                    # Only restore if entry was today (same date)
+                    entry_date = t.entry_time.date() if hasattr(t.entry_time, 'date') else None
+                    if entry_date == date.today():
+                        self._positions[sym] = t
+                        restored += 1
+                except Exception as ex:
+                    logger.warning(f"[DuxExec] Could not restore position {sym}: {ex}")
+            if restored:
+                logger.warning(
+                    f"[DuxExec] Restored {restored} open position(s) from disk — "
+                    f"verify against broker before trading!"
+                )
+        except Exception as e:
+            logger.warning(f"[DuxExec] Position load failed: {e}")
+
     # ── PUBLIC API ─────────────────────────────────────────────────────────────
 
     def enter(self, signal) -> dict:
@@ -230,6 +281,7 @@ class DuxExecutor:
         )
         with self._lock:
             self._positions[sym] = tracker
+        self._save_positions()
 
         self._risk.record_fill(
             symbol=sym,
@@ -638,6 +690,7 @@ class DuxExecutor:
             if tracker.shares_remaining <= 0:
                 with self._lock:
                     self._positions.pop(sym, None)
+            self._save_positions()
         else:
             logger.error(
                 f"[DuxExec] Exit order failed for {sym} ({reason}) — position NOT closed"
@@ -736,6 +789,50 @@ class _DuxTracker:
         self.breakeven_set    = False
         self.trail_active     = False
         self.partial1_done    = False
+
+    def to_dict(self) -> dict:
+        """Serialize tracker state for persistence."""
+        return {
+            "symbol":           self.symbol,
+            "direction":        self.direction,
+            "shares_total":     self.shares_total,
+            "shares_remaining": self.shares_remaining,
+            "entry_price":      self.entry_price,
+            "stop_price":       self.stop_price,
+            "target1":          self.target1,
+            "target2":          self.target2,
+            "expected_risk":    self.expected_risk,
+            "entry_time":       self.entry_time.isoformat(),
+            "running_extreme":  self.running_extreme,
+            "breakeven_set":    self.breakeven_set,
+            "trail_active":     self.trail_active,
+            "partial1_done":    self.partial1_done,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "_DuxTracker":
+        """Restore tracker from persisted dict."""
+        from datetime import datetime, timezone
+        t = cls(
+            symbol=d["symbol"],
+            shares_total=d["shares_total"],
+            entry_price=d["entry_price"],
+            stop_price=d["stop_price"],
+            target1=d["target1"],
+            target2=d["target2"],
+            direction=d["direction"],
+            expected_risk=d.get("expected_risk", 0.0),
+        )
+        t.shares_remaining = d.get("shares_remaining", d["shares_total"])
+        t.running_extreme  = d.get("running_extreme", d["entry_price"])
+        t.breakeven_set    = d.get("breakeven_set", False)
+        t.trail_active     = d.get("trail_active", False)
+        t.partial1_done    = d.get("partial1_done", False)
+        try:
+            t.entry_time = datetime.fromisoformat(d["entry_time"])
+        except Exception:
+            t.entry_time = datetime.now(timezone.utc)
+        return t
 
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────

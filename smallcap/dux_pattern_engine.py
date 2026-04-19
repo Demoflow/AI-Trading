@@ -851,7 +851,10 @@ def _session_candles(candles: list[dict]) -> list[dict]:
             continue
         try:
             if isinstance(ts, (int, float)):
-                dt = datetime.fromtimestamp(ts / 1000 if ts > 1e10 else ts)
+                from utils.time_helpers import CT_TZ
+                _tz = CT_TZ
+                raw = ts / 1000 if ts > 1e10 else ts
+                dt = datetime.fromtimestamp(raw, tz=_tz) if _tz else datetime.fromtimestamp(raw)
             elif isinstance(ts, str):
                 dt = datetime.fromisoformat(ts)
             else:

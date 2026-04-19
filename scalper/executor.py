@@ -38,7 +38,8 @@ class ScalperExecutor:
         self.portfolio = self._load()
 
     def _load(self):
-        path = "config/paper_scalp.json"
+        path = Path(__file__).parent.parent / "config" / "paper_scalp.json"
+        path = str(path)
         if os.path.exists(path):
             with open(path) as f:
                 data = json.load(f)
@@ -82,7 +83,7 @@ class ScalperExecutor:
         }
 
     def _save(self):
-        path = Path("config/paper_scalp.json")
+        path = Path(__file__).parent.parent / "config" / "paper_scalp.json"
         path.parent.mkdir(exist_ok=True)
         # Trim history to MAX_HISTORY
         if len(self.portfolio.get("history", [])) > MAX_HISTORY:

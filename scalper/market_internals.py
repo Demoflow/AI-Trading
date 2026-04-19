@@ -53,18 +53,18 @@ class MarketInternals:
         self._breadth_history = deque(maxlen=10)
 
     def initialize(self):
-        """Capture opening prices for breadth calculation."""
-        for etf in SECTOR_ETFS:
-            try:
-                resp = self.client.get_quote(etf)
-                if resp.status_code == httpx.codes.OK:
-                    data = resp.json()
-                    q  = data.get(etf, {}).get("quote", {})
+        """Capture opening prices for breadth calculation (single batch request)."""
+        try:
+            resp = self.client.get_quotes(SECTOR_ETFS)
+            if resp.status_code == httpx.codes.OK:
+                data = resp.json()
+                for etf in SECTOR_ETFS:
+                    q = data.get(etf, {}).get("quote", {})
                     op = q.get("openPrice", 0)
                     if op > 0:
                         self._baseline[etf] = op
-            except Exception:
-                pass
+        except Exception as e:
+            logger.debug(f"Market internals init error: {e}")
         self._initialized = len(self._baseline) >= 8
         if self._initialized:
             logger.info(f"Market internals: tracking {len(self._baseline)} sectors")
@@ -85,20 +85,25 @@ class MarketInternals:
         declining    = 0
         total_change = 0.0
 
+        try:
+            symbols = list(self._baseline.keys())
+            resp = self.client.get_quotes(symbols)
+            batch = resp.json() if resp.status_code == httpx.codes.OK else {}
+        except Exception as e:
+            logger.debug(f"Market internals breadth fetch error: {e}")
+            batch = {}
+
         for etf, open_price in self._baseline.items():
             try:
-                resp = self.client.get_quote(etf)
-                if resp.status_code == httpx.codes.OK:
-                    data    = resp.json()
-                    q       = data.get(etf, {}).get("quote", {})
-                    current = q.get("lastPrice", 0)
-                    if current > 0 and open_price > 0:
-                        change = (current - open_price) / open_price
-                        total_change += change
-                        if change > 0.001:
-                            advancing += 1
-                        elif change < -0.001:
-                            declining += 1
+                q = batch.get(etf, {}).get("quote", {})
+                current = q.get("lastPrice", 0)
+                if current > 0 and open_price > 0:
+                    change = (current - open_price) / open_price
+                    total_change += change
+                    if change > 0.001:
+                        advancing += 1
+                    elif change < -0.001:
+                        declining += 1
             except Exception:
                 pass
 

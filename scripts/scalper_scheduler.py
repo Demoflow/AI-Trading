@@ -23,6 +23,12 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+try:
+    from zoneinfo import ZoneInfo
+    _CT_TZ = ZoneInfo("America/Chicago")
+except ImportError:
+    _CT_TZ = None
+
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
@@ -74,30 +80,32 @@ def is_trading_day(d: date | None = None) -> bool:
 
 
 def _ct_now() -> datetime:
-    """Return current wall-clock time. Assumes system clock is set to Central Time."""
-    return datetime.now()
+    """Return current time in Central Time (timezone-aware)."""
+    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+
+
+def _make_ct_datetime(d: date, hour: int, minute: int) -> datetime:
+    """Build a CT-aware datetime for a given date and time."""
+    if _CT_TZ:
+        return datetime(d.year, d.month, d.day, hour, minute, tzinfo=_CT_TZ)
+    return datetime(d.year, d.month, d.day, hour, minute)
 
 
 def _next_trading_day_start() -> datetime:
     now = _ct_now()
-    startup_today = now.replace(
-        hour=STARTUP_HOUR_CT, minute=STARTUP_MINUTE_CT,
-        second=0, microsecond=0,
-    )
-    if is_trading_day() and now < startup_today:
+    today = now.date()
+    startup_today = _make_ct_datetime(today, STARTUP_HOUR_CT, STARTUP_MINUTE_CT)
+    if is_trading_day(today) and now < startup_today:
         return startup_today
 
-    candidate = date.today() + timedelta(days=1)
+    candidate = today + timedelta(days=1)
     for _ in range(14):
         if is_trading_day(candidate):
-            return datetime(
-                candidate.year, candidate.month, candidate.day,
-                STARTUP_HOUR_CT, STARTUP_MINUTE_CT,
-            )
+            return _make_ct_datetime(candidate, STARTUP_HOUR_CT, STARTUP_MINUTE_CT)
         candidate += timedelta(days=1)
 
-    d = date.today() + timedelta(days=7)
-    return datetime(d.year, d.month, d.day, STARTUP_HOUR_CT, STARTUP_MINUTE_CT)
+    d = today + timedelta(days=7)
+    return _make_ct_datetime(d, STARTUP_HOUR_CT, STARTUP_MINUTE_CT)
 
 
 def _wait_until(target: datetime):
@@ -132,9 +140,8 @@ def run_trading_session():
         )
         log.info(f"Scalper process started (PID {proc.pid})")
 
-        eod_safety = _ct_now().replace(
-            hour=EOD_SAFETY_HOUR_CT, minute=EOD_SAFETY_MINUTE_CT,
-            second=0, microsecond=0,
+        eod_safety = _make_ct_datetime(
+            _ct_now().date(), EOD_SAFETY_HOUR_CT, EOD_SAFETY_MINUTE_CT
         )
         deadline = (eod_safety - _ct_now()).total_seconds() + 3 * 3600
         deadline = max(deadline, 4 * 3600)

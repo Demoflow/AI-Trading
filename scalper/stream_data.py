@@ -157,8 +157,11 @@ class StreamDataClient:
             except Exception:
                 pass
 
+    _BACKOFF = [1, 2, 4, 8, 16, 30]  # seconds — matches smallcap stream_manager
+
     async def _stream_loop(self):
         from schwab.streaming import StreamClient
+        attempt = 0
 
         while not self._stop_event.is_set():
             try:
@@ -202,6 +205,7 @@ class StreamDataClient:
                 )
 
                 self._connected = True
+                attempt = 0  # reset backoff on successful connect
                 logger.info(
                     f"Stream: connected | {len(self._symbols)} symbols | "
                     f"L1 quotes + 1-min candles"
@@ -216,8 +220,13 @@ class StreamDataClient:
             except Exception as e:
                 self._connected = False
                 if not self._stop_event.is_set():
-                    logger.warning(f"Stream disconnected ({e}) — reconnecting in 5s")
-                    await asyncio.sleep(5)
+                    backoff = self._BACKOFF[min(attempt, len(self._BACKOFF) - 1)]
+                    logger.warning(
+                        f"Stream disconnected ({e}) — "
+                        f"reconnecting in {backoff}s (attempt {attempt + 1})"
+                    )
+                    await asyncio.sleep(backoff)
+                    attempt += 1
 
     async def _shutdown(self):
         if self._stream:

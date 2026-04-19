@@ -368,9 +368,24 @@ def run():
                                 pe.watch(sym)
                             if dux_pe:
                                 dux_pe.watch(sym)
+                                # Fetch real prior-day change so FRD pattern
+                                # can correctly qualify the symbol
+                                _prev_chg = 0
+                                _prior_cls = hit["price"] * 0.90
+                                try:
+                                    import httpx as _httpx
+                                    _qr = client.get_quote(sym)
+                                    if _qr.status_code == _httpx.codes.OK:
+                                        _qq = _qr.json().get(sym, {}).get("quote", {})
+                                        _prev_chg = _qq.get("regularMarketPercentChangeInDouble", 0)
+                                        _close_yest = _qq.get("closePrice", 0)
+                                        if _close_yest > 0:
+                                            _prior_cls = _close_yest
+                                except Exception:
+                                    pass
                                 dux_pe.set_candidate_meta(sym, {
-                                    "prev_day_change_pct": 0,
-                                    "prior_close":         hit["price"] * 0.90,
+                                    "prev_day_change_pct": _prev_chg,
+                                    "prior_close":         _prior_cls,
                                     "premarket_vol":       hit["volume"],
                                     "float":               None,
                                 })

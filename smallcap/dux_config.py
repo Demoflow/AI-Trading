@@ -95,4 +95,5 @@ DUX_MAX_ENTRY_DRIFT_PCT    = 0.02        # 2% drift tolerance before rejecting s
 DUX_QUOTE_STALENESS_SEC    = 10          # Reject entry if quote older than this (seconds)
 
 # ── PORTFOLIO PERSISTENCE ──────────────────────────────────────────────────────
-DUX_PORTFOLIO_PATH         = "config/dux_portfolio.json"
+from pathlib import Path as _Path
+DUX_PORTFOLIO_PATH = str(_Path(__file__).parent.parent / "config" / "dux_portfolio.json")

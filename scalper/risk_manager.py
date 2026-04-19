@@ -18,35 +18,59 @@ from pathlib import Path
 from datetime import datetime, date
 from loguru import logger
 
-try:
-    from zoneinfo import ZoneInfo
-    _CT_TZ = ZoneInfo("America/Chicago")
-except ImportError:
-    _CT_TZ = None
+from utils.time_helpers import now_ct, hour_ct, today_ct, CT_TZ
 
-_RISK_STATE_PATH = "config/scalper_risk_state.json"
+# Anchor path relative to this file — works regardless of working directory
+_RISK_STATE_PATH = Path(__file__).parent.parent / "config" / "scalper_risk_state.json"
 
-
-def _now_ct():
-    return datetime.now(tz=_CT_TZ) if _CT_TZ else datetime.now()
+# Legacy aliases kept for any internal callers
+_now_ct = now_ct
+_hour_ct = hour_ct
 
 
-def _hour_ct() -> float:
-    n = _now_ct()
-    return n.hour + n.minute / 60.0 + n.second / 3600.0
+def _load_event_dates():
+    """
+    Load FOMC/CPI dates from config/event_dates.json.
+    Falls back to hardcoded 2026 dates if the file is missing.
+    Logs a WARNING at startup if no dates exist for the current year.
+    """
+    config_path = Path(__file__).parent.parent / "config" / "event_dates.json"
+    current_year = today_ct().year
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                data = json.load(f)
+            fomc = data.get("fomc", [])
+            cpi  = data.get("cpi",  [])
+        else:
+            raise FileNotFoundError
+    except Exception:
+        # Hardcoded fallback — update event_dates.json annually
+        fomc = [
+            "2026-01-29", "2026-03-18", "2026-05-06",
+            "2026-06-17", "2026-07-29", "2026-09-16",
+            "2026-10-28", "2026-12-09",
+        ]
+        cpi = [
+            "2026-01-14", "2026-02-12", "2026-03-11",
+            "2026-04-14", "2026-05-13", "2026-06-10",
+            "2026-07-15", "2026-08-12", "2026-09-16",
+            "2026-10-14", "2026-11-12", "2026-12-09",
+        ]
+
+    # Warn if no dates exist for current year
+    all_dates = fomc + cpi
+    years_present = {d[:4] for d in all_dates}
+    if str(current_year) not in years_present:
+        logger.warning(
+            f"EVENT DATES: no FOMC/CPI dates found for {current_year}. "
+            f"Update config/event_dates.json — event-day risk reduction is DISABLED."
+        )
+
+    return set(fomc), set(cpi)
 
 
-FOMC_DATES = [
-    "2026-01-29", "2026-03-18", "2026-05-06",
-    "2026-06-17", "2026-07-29", "2026-09-16",
-    "2026-10-28", "2026-12-09",
-]
-CPI_DATES = [
-    "2026-01-14", "2026-02-12", "2026-03-11",
-    "2026-04-14", "2026-05-13", "2026-06-10",
-    "2026-07-15", "2026-08-12", "2026-09-16",
-    "2026-10-14", "2026-11-12", "2026-12-09",
-]
+FOMC_DATES, CPI_DATES = _load_event_dates()
 
 
 class ScalperRiskManager:
@@ -71,7 +95,7 @@ class ScalperRiskManager:
         self.daily_pnl = 0.0
         self.open_positions = 0
         self.shutdown = False
-        self._trade_date = date.today()
+        self._trade_date = today_ct()
         self.day_type = ""
         self.gex_regime = ""
         self._consecutive_losses = 0
@@ -85,7 +109,7 @@ class ScalperRiskManager:
             if os.path.exists(_RISK_STATE_PATH):
                 with open(_RISK_STATE_PATH) as f:
                     s = json.load(f)
-                if s.get("date") == date.today().isoformat():
+                if s.get("date") == today_ct().isoformat():
                     self.trades_today = s.get("trades_today", 0)
                     self.daily_pnl = s.get("daily_pnl", 0.0)
                     self._consecutive_losses = s.get("consecutive_losses", 0)
@@ -118,23 +142,23 @@ class ScalperRiskManager:
             logger.warning(f"Risk state save failed: {e}")
 
     def _reset_if_new_day(self):
-        if date.today() != self._trade_date:
+        if today_ct() != self._trade_date:
             self.trades_today = 0
             self.daily_pnl = 0.0
             self.shutdown = False
             self._consecutive_losses = 0
-            self._trade_date = date.today()
+            self._trade_date = today_ct()
             self._save_state()
 
     # ── TRADING WINDOW ───────────────────────────────────────────────────────
 
     def is_event_day(self):
-        today = date.today().isoformat()
+        today = today_ct().isoformat()
         if today in FOMC_DATES:
             return True, "FOMC"
         if today in CPI_DATES:
             return True, "CPI"
-        d = date.today()
+        d = today_ct()
         if d.weekday() == 4 and d.day <= 7:
             return True, "NFP"
         return False, ""
