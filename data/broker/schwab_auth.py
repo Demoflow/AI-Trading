@@ -43,12 +43,14 @@ def _check_token_age():
         if days_left < 0:
             logger.error(
                 f"Schwab refresh token EXPIRED ({age_days:.1f} days old). "
-                f"Run: python scripts/authenticate_schwab.py"
+                f"Desktop: python scripts/authenticate_schwab.py | "
+                f"VPS/SSH: python scripts/authenticate_manual.py"
             )
         elif days_left < 3:
             logger.warning(
                 f"Schwab refresh token expires in {days_left:.1f} day(s). "
-                f"Re-authenticate soon: python scripts/authenticate_schwab.py"
+                f"Desktop: python scripts/authenticate_schwab.py | "
+                f"VPS/SSH: python scripts/authenticate_manual.py"
             )
         else:
             logger.info(
@@ -80,10 +82,12 @@ def get_schwab_client():
         except Exception as e:
             if "refresh_token_authentication_error" in str(e):
                 logger.error("Schwab refresh token EXPIRED (7-day limit).")
-                logger.error("Re-authenticate: python scripts/authenticate_schwab.py")
+                logger.error("Re-authenticate (desktop): python scripts/authenticate_schwab.py")
+                logger.error("Re-authenticate (VPS/SSH): python scripts/authenticate_manual.py")
             else:
                 logger.warning(f"Token load failed: {e}")
-                logger.warning("Run: python scripts/authenticate_schwab.py")
+                logger.warning("Desktop: python scripts/authenticate_schwab.py")
+                logger.warning("VPS/SSH: python scripts/authenticate_manual.py")
             raise
     else:
         raise FileNotFoundError(

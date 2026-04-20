@@ -10,7 +10,7 @@ if __name__ == "__main__":
     print("  SCALPER DASHBOARD")
     print("=" * 60)
     print("  URL (local):  http://localhost:8888")
-    print("  URL (phone):  http://172.16.101.48:8888")
+    print("  URL (network): http://<your-server-ip>:8888")
     print("  Updates: every 2 seconds via WebSocket")
     print("  Data:    config/paper_scalp.json + live Schwab quotes")
     print("  Stop:    Ctrl+C")

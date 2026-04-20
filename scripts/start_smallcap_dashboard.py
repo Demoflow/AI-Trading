@@ -11,7 +11,7 @@ if __name__ == "__main__":
     print("  SMALL CAP DASHBOARD")
     print("=" * 60)
     print("  URL (local):  http://localhost:8889")
-    print("  URL (phone):  http://172.16.101.48:8889")
+    print("  URL (network): http://<your-server-ip>:8889")
     print("  Updates: every 2 seconds via WebSocket")
     print("  Data:    config/smallcap_portfolio.json + Schwab quotes")
     print("  Stop:    Ctrl+C")
