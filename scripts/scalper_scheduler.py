@@ -55,7 +55,8 @@ STARTUP_MINUTE_CT = 15
 EOD_SAFETY_HOUR_CT   = 14
 EOD_SAFETY_MINUTE_CT = 55
 
-PYTHON = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+import platform as _platform
+PYTHON = str(BASE_DIR / "venv" / ("Scripts" if _platform.system() == "Windows" else "bin") / ("python.exe" if _platform.system() == "Windows" else "python"))
 SCRIPT = str(BASE_DIR / "scripts" / "scalper_live.py")
 
 HOLIDAYS_FILE = BASE_DIR / "config" / "holidays_2026.json"

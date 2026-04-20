@@ -16,7 +16,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import secrets
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from loguru import logger
@@ -29,6 +31,28 @@ LOG_DIR = BASE_DIR / "logs"
 
 app = FastAPI(title="VWAP Scalper Dashboard")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
+# ── HTTP Basic Auth ──────────────────────────────────────────────────────────
+# Set DASHBOARD_PASSWORD in your .env file to protect the dashboard.
+# Username is always "admin". If DASHBOARD_PASSWORD is not set, auth is disabled.
+_DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+_security = HTTPBasic()
+
+
+def _check_auth(credentials: HTTPBasicCredentials = Depends(_security)):
+    """Verify HTTP Basic credentials against the env-configured password."""
+    correct_user = secrets.compare_digest(credentials.username, "admin")
+    correct_pass = secrets.compare_digest(credentials.password, _DASHBOARD_PASSWORD)
+    if not (correct_user and correct_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
+
+
+_auth_deps = [Depends(_check_auth)] if _DASHBOARD_PASSWORD else []
 
 
 # ── Schwab client (lazy init) ──
@@ -263,12 +287,12 @@ async def startup():
 
 
 # ── Routes ──
-@app.get("/")
+@app.get("/", dependencies=_auth_deps)
 async def root():
     return FileResponse(str(Path(__file__).parent / "static" / "index.html"))
 
 
-@app.get("/api/snapshot")
+@app.get("/api/snapshot", dependencies=_auth_deps)
 async def snapshot():
     return build_snapshot()
 

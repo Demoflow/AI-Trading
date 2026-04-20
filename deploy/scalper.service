@@ -1,0 +1,19 @@
+[Unit]
+Description=VWAP Stock Scalper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trading
+Group=trading
+WorkingDirectory=/home/trading/trading_system
+ExecStart=/home/trading/trading_system/venv/bin/python scripts/scalper_scheduler.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

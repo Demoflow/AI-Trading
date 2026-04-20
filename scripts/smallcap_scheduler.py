@@ -22,6 +22,9 @@ import subprocess
 import logging
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+_CT_TZ = ZoneInfo("America/Chicago")
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
@@ -49,8 +52,9 @@ STARTUP_MINUTE_CT = 50
 EOD_SAFETY_HOUR_CT   = 14
 EOD_SAFETY_MINUTE_CT = 45
 
-# Python executable from the venv
-PYTHON  = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
+# Python executable from the venv (cross-platform: Windows Scripts/ vs Linux bin/)
+import platform as _platform
+PYTHON  = str(BASE_DIR / "venv" / ("Scripts" if _platform.system() == "Windows" else "bin") / ("python.exe" if _platform.system() == "Windows" else "python"))
 SCRIPT  = str(BASE_DIR / "scripts" / "smallcap_live.py")
 
 # Market calendar: skip weekends + holidays
@@ -78,12 +82,8 @@ def is_trading_day(d: date | None = None) -> bool:
 
 
 def _ct_now() -> datetime:
-    """
-    Return current wall-clock time as a naive datetime treated as CT.
-    Assumes Windows system clock is set to Central Time.
-    If your clock is set to ET, subtract 1 hour from STARTUP_HOUR_CT above.
-    """
-    return datetime.now()
+    """Return current time in Central Time (timezone-aware)."""
+    return datetime.now(tz=_CT_TZ)
 
 
 def _next_trading_day_start() -> datetime:
@@ -93,28 +93,29 @@ def _next_trading_day_start() -> datetime:
     Otherwise, find the next trading weekday.
     """
     now = _ct_now()
-    startup_today = now.replace(
-        hour=STARTUP_HOUR_CT, minute=STARTUP_MINUTE_CT,
-        second=0, microsecond=0,
+    today = now.date()
+    startup_today = datetime(
+        today.year, today.month, today.day,
+        STARTUP_HOUR_CT, STARTUP_MINUTE_CT, tzinfo=_CT_TZ,
     )
 
     # If today is a trading day and startup is still in the future
-    if is_trading_day() and now < startup_today:
+    if is_trading_day(today) and now < startup_today:
         return startup_today
 
     # Otherwise find the next trading day
-    candidate = date.today() + timedelta(days=1)
+    candidate = today + timedelta(days=1)
     for _ in range(14):  # look ahead up to 2 weeks
         if is_trading_day(candidate):
             return datetime(
                 candidate.year, candidate.month, candidate.day,
-                STARTUP_HOUR_CT, STARTUP_MINUTE_CT,
+                STARTUP_HOUR_CT, STARTUP_MINUTE_CT, tzinfo=_CT_TZ,
             )
         candidate += timedelta(days=1)
 
     # Fallback: 7 days out (should never happen)
-    d = date.today() + timedelta(days=7)
-    return datetime(d.year, d.month, d.day, STARTUP_HOUR_CT, STARTUP_MINUTE_CT)
+    d = today + timedelta(days=7)
+    return datetime(d.year, d.month, d.day, STARTUP_HOUR_CT, STARTUP_MINUTE_CT, tzinfo=_CT_TZ)
 
 
 def _wait_until(target: datetime):
@@ -159,9 +160,10 @@ def run_trading_session():
         # Wait for the session to finish
         # The script exits at EOD_FLATTEN (~2:30 PM CT) on its own.
         # We add a generous 3-hour safety timeout beyond expected EOD just in case.
-        eod_safety = _ct_now().replace(
-            hour=EOD_SAFETY_HOUR_CT, minute=EOD_SAFETY_MINUTE_CT,
-            second=0, microsecond=0,
+        now_ct = _ct_now()
+        eod_safety = datetime(
+            now_ct.year, now_ct.month, now_ct.day,
+            EOD_SAFETY_HOUR_CT, EOD_SAFETY_MINUTE_CT, tzinfo=_CT_TZ,
         )
         # Allow up to 3 hours past the safety time before killing
         deadline = (eod_safety - _ct_now()).total_seconds() + 3 * 3600

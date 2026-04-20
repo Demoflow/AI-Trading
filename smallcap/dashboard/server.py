@@ -1,15 +1,20 @@
 """
-Small Cap Dashboard Server
+Small Cap Dashboard Server v2
+Real-time view of the dual-strategy small cap trader (Ross + Dux).
 
-Serves a real-time view of the small cap momentum trader via WebSocket.
-Reads config/smallcap_portfolio.json + config/smallcap_candidates.json
-+ live Schwab equity quotes for open positions.
+Data sources:
+  config/smallcap_portfolio.json  — Ross Cameron strategy state
+  config/dux_portfolio.json       — Steven Dux strategy state
+  config/smallcap_candidates.json — pre-market gap candidates
+  logs/trading_YYYY-MM-DD.log     — live log tail + market character + catalysts
+  Schwab API                      — live quotes for open positions
 
-Port: 8889  (scalper dashboard uses 8888, so they can run side by side)
+Port: 8889  (scalper dashboard uses 8888)
 """
 
 import sys
 import os
+import re
 import json
 import asyncio
 from datetime import datetime, date
@@ -21,21 +26,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import secrets
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from loguru import logger
 
-BASE_DIR   = Path(__file__).parent.parent.parent
-PORTFOLIO  = BASE_DIR / "config" / "smallcap_portfolio.json"
-CANDIDATES = BASE_DIR / "config" / "smallcap_candidates.json"
-LOG_DIR    = BASE_DIR / "logs"
+BASE_DIR      = Path(__file__).parent.parent.parent
+PORTFOLIO     = BASE_DIR / "config" / "smallcap_portfolio.json"
+DUX_PORTFOLIO = BASE_DIR / "config" / "dux_portfolio.json"
+CANDIDATES    = BASE_DIR / "config" / "smallcap_candidates.json"
+LOG_DIR       = BASE_DIR / "logs"
 
-# Risk constants (mirrors config.py — read directly to avoid import side-effects)
-MAX_DAILY_LOSS      = 500.0
-MAX_RISK_PER_TRADE  = 250.0
-MAX_CONSECUTIVE     = 3
-STARTING_EQUITY     = 25_000.0
+MAX_DAILY_LOSS     = 500.0
+DUX_DAILY_LOSS     = 750.0
+MAX_RISK_PER_TRADE = 250.0
+MAX_CONSECUTIVE    = 3
 
 app = FastAPI(title="Small Cap Dashboard")
 app.mount(
@@ -43,6 +50,30 @@ app.mount(
     StaticFiles(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
+
+# ── HTTP Basic Auth ──────────────────────────────────────────────────────────
+# Set DASHBOARD_PASSWORD in your .env file to protect the dashboard.
+# Username is always "admin". If DASHBOARD_PASSWORD is not set, auth is disabled
+# (backward compatible for local development).
+_DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+_security = HTTPBasic()
+
+
+def _check_auth(credentials: HTTPBasicCredentials = Depends(_security)):
+    """Verify HTTP Basic credentials against the env-configured password."""
+    correct_user = secrets.compare_digest(credentials.username, "admin")
+    correct_pass = secrets.compare_digest(credentials.password, _DASHBOARD_PASSWORD)
+    if not (correct_user and correct_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
+
+
+# Build a dependency list: if password is set, require auth; otherwise no-op.
+_auth_deps = [Depends(_check_auth)] if _DASHBOARD_PASSWORD else []
 
 
 # ── Schwab client (lazy, shared) ─────────────────────────────────────────────
@@ -55,11 +86,11 @@ def _get_client():
             from data.broker.schwab_auth import get_schwab_client
             _schwab_client = get_schwab_client()
         except Exception as e:
-            logger.debug(f"Dashboard: Schwab connect: {e}")
+            logger.debug(f"Dashboard Schwab: {e}")
     return _schwab_client
 
 
-# ── WebSocket connection manager ─────────────────────────────────────────────
+# ── WebSocket manager ─────────────────────────────────────────────────────────
 class ConnectionManager:
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -69,7 +100,6 @@ class ConnectionManager:
         self.active.append(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.discard(ws) if hasattr(self.active, "discard") else None
         if ws in self.active:
             self.active.remove(ws)
 
@@ -86,11 +116,11 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# ── Data readers ─────────────────────────────────────────────────────────────
+# ── File readers ──────────────────────────────────────────────────────────────
 
-def _read_portfolio() -> dict:
+def _read_json(path: Path) -> dict:
     try:
-        with open(PORTFOLIO) as f:
+        with open(path) as f:
             return json.load(f)
     except Exception:
         return {}
@@ -100,13 +130,18 @@ def _read_candidates() -> list:
     try:
         with open(CANDIDATES) as f:
             data = json.load(f)
-        return data.get("candidates", [])
+        return sorted(
+            data.get("candidates", []),
+            key=lambda c: c.get("gap_pct", 0),
+            reverse=True,
+        )
     except Exception:
         return []
 
 
-def _live_quotes(symbols: list[str]) -> dict[str, dict]:
-    """Fetch batch equity quotes from Schwab for open position symbols."""
+# ── Live Schwab quotes ────────────────────────────────────────────────────────
+
+def _live_quotes(symbols: list) -> dict:
     if not symbols:
         return {}
     client = _get_client()
@@ -120,157 +155,321 @@ def _live_quotes(symbols: list[str]) -> dict[str, dict]:
         raw = r.json()
         result = {}
         for sym in symbols:
-            entry = raw.get(sym, {})
-            q = entry.get("quote", entry)
-            last = (
-                q.get("lastPrice") or
-                q.get("mark") or
-                q.get("regularMarketLastPrice") or 0
-            )
-            result[sym] = {"last": last}
+            q = raw.get(sym, {}).get("quote", {})
+            last = q.get("lastPrice") or q.get("mark") or 0
+            bid  = q.get("bidPrice", 0)
+            ask  = q.get("askPrice", 0)
+            result[sym] = {"last": float(last), "bid": float(bid), "ask": float(ask)}
         return result
     except Exception as e:
         logger.debug(f"Dashboard quotes: {e}")
         return {}
 
 
+# ── Market context from Schwab ────────────────────────────────────────────────
+_market_cache: dict = {}
+_market_last_fetch: float = 0.0
+
 def _market_context() -> dict:
+    global _market_cache, _market_last_fetch
+    import time
+    # Refresh every 10 seconds
+    if time.monotonic() - _market_last_fetch < 10 and _market_cache:
+        return _market_cache
     client = _get_client()
     if not client:
-        return {}
-    ctx = {}
+        return _market_cache
+    ctx = dict(_market_cache)
     try:
         import httpx
-        r = client.get_quote("SPY")
+        r = client.get_quotes(["SPY", "$VIX"])
         if r.status_code == httpx.codes.OK:
-            q = r.json().get("SPY", {}).get("quote", {})
-            ctx["spy_price"]      = q.get("lastPrice", 0)
-            ctx["spy_change_pct"] = q.get("netPercentChangeInDouble", 0)
-        r = client.get_quote("$VIX")
-        if r.status_code == httpx.codes.OK:
-            q = r.json().get("$VIX", {}).get("quote", {})
-            ctx["vix"] = q.get("lastPrice", 0)
+            raw = r.json()
+            spy = raw.get("SPY", {}).get("quote", {})
+            vix = raw.get("$VIX", {}).get("quote", {})
+            ctx["spy_price"]      = round(float(spy.get("lastPrice", 0)), 2)
+            ctx["spy_change_pct"] = round(float(spy.get("netPercentChangeInDouble", 0)), 2)
+            ctx["vix"]            = round(float(vix.get("lastPrice", 0)), 2)
     except Exception as e:
         logger.debug(f"Market context: {e}")
+    _market_cache = ctx
+    _market_last_fetch = time.monotonic()
     return ctx
 
 
-def _tail_log(n: int = 30) -> list[str]:
+# ── Log parsing ───────────────────────────────────────────────────────────────
+
+def _today_log() -> Path | None:
+    p = LOG_DIR / f"trading_{date.today().isoformat()}.log"
+    if p.exists():
+        return p
+    logs = sorted(LOG_DIR.glob("trading_*.log"))
+    return logs[-1] if logs else None
+
+
+def _tail_log(n: int = 35) -> list:
+    lp = _today_log()
+    if not lp:
+        return []
     try:
-        today_log = LOG_DIR / f"trading_{date.today().isoformat()}.log"
-        if not today_log.exists():
-            logs = sorted(LOG_DIR.glob("trading_*.log"))
-            if not logs:
-                return []
-            today_log = logs[-1]
-        with open(today_log, encoding="utf-8", errors="ignore") as f:
-            lines = deque(f, maxlen=n)
-        return [l.strip() for l in lines]
+        with open(lp, encoding="utf-8", errors="ignore") as f:
+            return [line.strip() for line in deque(f, maxlen=n)]
     except Exception:
         return []
 
 
-def _session_status(portfolio: dict, positions: list) -> str:
-    """Infer session status from portfolio + time of day."""
-    now_h = datetime.now().hour + datetime.now().minute / 60.0
-    if not portfolio:
-        return "OFFLINE"
-    if portfolio.get("daily_halted"):
+# Regex patterns for log parsing
+_RE_REGIME  = re.compile(r"Market character: \[(\w+)\] OFE[≥>=]+(\d+)\s*\|.*?\|(.+?)$", re.IGNORECASE)
+_RE_CATALYST = re.compile(
+    r"LLM catalyst \[(\w+)\]: score [+\-\d]+[→>]+([+\-\d]+) \((\w+)\) — (.+?) \|"
+)
+_RE_CATALYST2 = re.compile(
+    r"Universe expanded: added (\w+) \(catalyst score=([+\-\d]+)\) \| (.+?)$"
+)
+
+
+def _parse_market_character(lines: list) -> dict:
+    """Scan the day's log for the most recent market character line."""
+    for line in reversed(lines):
+        m = _RE_REGIME.search(line)
+        if m:
+            return {
+                "regime":        m.group(1).upper(),
+                "ofe_threshold": int(m.group(2)),
+                "regime_note":   m.group(3).strip(),
+            }
+    return {}
+
+
+def _parse_catalysts(n: int = 8) -> list:
+    """Return the last N catalyst discoveries from today's log."""
+    lp = _today_log()
+    if not lp:
+        return []
+    hits = []
+    try:
+        with open(lp, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                m = _RE_CATALYST.search(line)
+                if m:
+                    ts_match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+                    hits.append({
+                        "symbol":    m.group(1),
+                        "score":     int(m.group(2)),
+                        "sentiment": m.group(3),
+                        "headline":  m.group(4).strip(),
+                        "time":      ts_match.group(1) if ts_match else "",
+                    })
+    except Exception:
+        pass
+    # Deduplicate by symbol (keep highest |score|)
+    seen: dict = {}
+    for h in hits:
+        sym = h["symbol"]
+        if sym not in seen or abs(h["score"]) > abs(seen[sym]["score"]):
+            seen[sym] = h
+    return sorted(seen.values(), key=lambda x: x["time"], reverse=True)[:n]
+
+
+# ── Session status ─────────────────────────────────────────────────────────────
+
+def _session_status(ross: dict, dux: dict, open_count: int) -> str:
+    if ross.get("daily_halted") and dux.get("daily_halted"):
         return "HALTED"
-    # 7:00–8:30 CT (6–7.5 ET offset) = pre-market
-    if 6.0 <= now_h < 8.5:
+    h = datetime.now().hour + datetime.now().minute / 60.0
+    if not ross and not dux:
+        return "OFFLINE"
+    if 6.0 <= h < 8.5:
         return "PRE-MARKET"
-    if 8.5 <= now_h < 14.5:
-        return "LIVE" if positions else "WATCHING"
-    if now_h >= 14.5:
+    if 8.5 <= h < 14.5:
+        return "LIVE" if open_count else "WATCHING"
+    if h >= 14.5:
         return "CLOSED"
     return "IDLE"
 
 
-# ── Snapshot builder ─────────────────────────────────────────────────────────
+# ── Main snapshot builder ─────────────────────────────────────────────────────
 
 def build_snapshot() -> dict:
-    portfolio  = _read_portfolio()
+    ross = _read_json(PORTFOLIO)
+    dux  = _read_json(DUX_PORTFOLIO)
     candidates = _read_candidates()
+    log_lines  = _tail_log(35)
+    mkt_char   = _parse_market_character(log_lines)
+    catalysts  = _parse_catalysts(8)
+    today      = date.today().isoformat()
 
-    # ── Risk state ────────────────────────────────────────────────────────────
-    daily_pnl        = portfolio.get("daily_pnl", 0.0)
-    consecutive_loss = portfolio.get("consecutive_loss", 0)
-    trades_today     = portfolio.get("trades_today", 0)
-    daily_halted     = portfolio.get("daily_halted", False)
-    raw_positions    = portfolio.get("positions", {})   # {sym: {shares, avg_price, entry}}
-    closed_trades    = portfolio.get("closed_trades", [])
+    # ── Ross positions ────────────────────────────────────────────────────────
+    ross_positions = ross.get("positions", {}) if ross.get("date") == today else {}
+    # ── Dux positions ─────────────────────────────────────────────────────────
+    dux_positions  = dux.get("positions", {})  if dux.get("date")  == today else {}
 
-    # ── Live quotes for open positions ────────────────────────────────────────
-    syms   = list(raw_positions.keys())
-    quotes = _live_quotes(syms)
+    # Fetch live quotes for all open symbols
+    all_syms = list(set(list(ross_positions.keys()) + list(dux_positions.keys())))
+    quotes   = _live_quotes(all_syms)
 
-    open_pnl = 0.0
+    # ── Build merged positions list ───────────────────────────────────────────
+    open_pnl  = 0.0
     positions_out = []
-    for sym, pos in raw_positions.items():
+
+    for sym, pos in ross_positions.items():
         shares    = pos.get("shares", 0)
         avg_price = pos.get("avg_price", 0.0)
-        entry     = pos.get("entry", avg_price)
-        current   = quotes.get(sym, {}).get("last", 0.0) or avg_price
-        pnl       = (current - avg_price) * shares
-        pnl_pct   = (current - avg_price) / avg_price * 100 if avg_price else 0
+        q         = quotes.get(sym, {})
+        current   = q.get("last") or avg_price
+        pnl       = round((current - avg_price) * shares, 2)
+        pnl_pct   = round((current - avg_price) / avg_price * 100, 2) if avg_price else 0
         open_pnl += pnl
         positions_out.append({
-            "symbol":      sym,
-            "shares":      shares,
-            "entry_price": round(entry, 4),
-            "avg_price":   round(avg_price, 4),
-            "current":     round(current, 4),
-            "pnl":         round(pnl, 2),
-            "pnl_pct":     round(pnl_pct, 2),
+            "symbol":    sym,
+            "strategy":  "ROSS",
+            "direction": "LONG",
+            "shares":    shares,
+            "entry_price": round(avg_price, 4),
+            "current":   round(current, 4),
+            "bid":       round(q.get("bid", 0), 4),
+            "ask":       round(q.get("ask", 0), 4),
+            "pnl":       pnl,
+            "pnl_pct":   pnl_pct,
         })
 
-    # ── Today's closed trades ─────────────────────────────────────────────────
-    today = date.today().isoformat()
-    closed_today = [t for t in closed_trades if t.get("time", "")[:10] == today]
-    closed_today.sort(key=lambda t: t.get("time", ""), reverse=True)
+    for sym, pos in dux_positions.items():
+        shares    = pos.get("shares", 0)
+        avg_price = pos.get("avg_price", 0.0)
+        direction = pos.get("direction", "LONG").upper()
+        q         = quotes.get(sym, {})
+        current   = q.get("last") or avg_price
+        # Short P&L: profit when price falls
+        if direction == "SHORT":
+            pnl     = round((avg_price - current) * shares, 2)
+            pnl_pct = round((avg_price - current) / avg_price * 100, 2) if avg_price else 0
+        else:
+            pnl     = round((current - avg_price) * shares, 2)
+            pnl_pct = round((current - avg_price) / avg_price * 100, 2) if avg_price else 0
+        open_pnl += pnl
+        positions_out.append({
+            "symbol":    sym,
+            "strategy":  "DUX",
+            "direction": direction,
+            "shares":    shares,
+            "entry_price": round(avg_price, 4),
+            "current":   round(current, 4),
+            "bid":       round(q.get("bid", 0), 4),
+            "ask":       round(q.get("ask", 0), 4),
+            "pnl":       pnl,
+            "pnl_pct":   pnl_pct,
+        })
 
-    # ── Realized P&L today (from risk manager) ────────────────────────────────
-    wins   = sum(1 for t in closed_today if t["pnl"] > 0)
-    losses = sum(1 for t in closed_today if t["pnl"] < 0)
+    # Sort by abs(pnl) descending so biggest movers are at top
+    positions_out.sort(key=lambda p: abs(p["pnl"]), reverse=True)
 
-    # ── Summary block ────────────────────────────────────────────────────────
-    limit_used_pct = abs(min(daily_pnl, 0)) / MAX_DAILY_LOSS * 100
+    # ── Closed trades today ────────────────────────────────────────────────────
+    ross_closed = [
+        {**t, "strategy": "ROSS", "direction": "LONG"}
+        for t in ross.get("closed_trades", [])
+        if t.get("time", "")[:10] == today
+    ]
+    dux_closed = [
+        {**t, "strategy": "DUX", "direction": t.get("direction", "LONG").upper()}
+        for t in dux.get("closed_trades", [])
+        if t.get("time", "")[:10] == today
+    ]
+    closed_today = sorted(
+        ross_closed + dux_closed,
+        key=lambda t: t.get("time", ""),
+        reverse=True,
+    )
 
+    # ── Ross risk summary ──────────────────────────────────────────────────────
+    ross_pnl    = ross.get("daily_pnl", 0.0) if ross.get("date") == today else 0.0
+    ross_trades = ross.get("trades_today", 0) if ross.get("date") == today else 0
+    ross_streak = ross.get("consecutive_loss", 0) if ross.get("date") == today else 0
+    ross_halted = ross.get("daily_halted", False)
+    ross_wins   = sum(1 for t in ross_closed if t.get("pnl", 0) > 0)
+    ross_losses = sum(1 for t in ross_closed if t.get("pnl", 0) < 0)
+
+    # ── Dux risk summary ───────────────────────────────────────────────────────
+    dux_pnl    = dux.get("daily_pnl", 0.0) if dux.get("date") == today else 0.0
+    dux_trades = dux.get("trades_today", 0) if dux.get("date") == today else 0
+    dux_streak = dux.get("consecutive_loss", 0) if dux.get("date") == today else 0
+    dux_halted = dux.get("daily_halted", False)
+    dux_wins   = dux.get("wins_today", 0) if dux.get("date") == today else 0
+    dux_losses = dux_trades - dux_wins
+    dux_wr     = dux.get("win_rate", 0.0) if dux.get("date") == today else 0.0
+    dux_errmde = dux.get("error_mode", 0) if dux.get("date") == today else 0
+
+    # ── Combined summary ───────────────────────────────────────────────────────
+    total_pnl_realized = ross_pnl + dux_pnl
+    total_trades       = ross_trades + dux_trades
+    total_wins         = ross_wins + dux_wins
+    total_losses       = ross_losses + dux_losses
+    total_wr           = round(total_wins / total_trades * 100, 1) if total_trades else 0.0
+    worst_streak       = max(ross_streak, dux_streak)
+    either_halted      = ross_halted or dux_halted
+
+    limit_used = abs(min(total_pnl_realized, 0)) / MAX_DAILY_LOSS * 100
+
+    # ── Market context ────────────────────────────────────────────────────────
     market = _market_context()
-    log    = _tail_log(30)
-    status = _session_status(portfolio, positions_out)
+    market.update(mkt_char)   # Overlay regime/ofe from log
+
+    status = _session_status(ross, dux, len(positions_out))
 
     return {
         "timestamp": datetime.now().isoformat(),
         "status":    status,
+
+        "market": market,
+
         "summary": {
-            "daily_pnl":        round(daily_pnl, 2),
-            "open_pnl":         round(open_pnl, 2),
-            "total_pnl":        round(daily_pnl + open_pnl, 2),
-            "trades_today":     trades_today,
-            "wins":             wins,
-            "losses":           losses,
-            "open_count":       len(positions_out),
+            "daily_pnl":    round(total_pnl_realized, 2),
+            "open_pnl":     round(open_pnl, 2),
+            "total_pnl":    round(total_pnl_realized + open_pnl, 2),
+            "trades_today": total_trades,
+            "wins":         total_wins,
+            "losses":       total_losses,
+            "win_rate":     total_wr,
+            "open_count":   len(positions_out),
         },
+
+        "ross": {
+            "daily_pnl":        round(ross_pnl, 2),
+            "trades_today":     ross_trades,
+            "wins":             ross_wins,
+            "losses":           ross_losses,
+            "consecutive_loss": ross_streak,
+            "halted":           ross_halted,
+        },
+
+        "dux": {
+            "daily_pnl":        round(dux_pnl, 2),
+            "trades_today":     dux_trades,
+            "wins":             dux_wins,
+            "losses":           dux_losses,
+            "win_rate":         round(dux_wr * 100, 1),
+            "consecutive_loss": dux_streak,
+            "error_mode":       dux_errmde,
+            "halted":           dux_halted,
+        },
+
         "risk": {
-            "daily_pnl":        round(daily_pnl, 2),
+            "daily_pnl":        round(total_pnl_realized, 2),
             "daily_limit":      MAX_DAILY_LOSS,
-            "limit_used_pct":   round(limit_used_pct, 1),
-            "consecutive_loss": consecutive_loss,
+            "limit_used_pct":   round(limit_used, 1),
+            "consecutive_loss": worst_streak,
             "max_consecutive":  MAX_CONSECUTIVE,
-            "halted":           daily_halted,
-            "max_risk_trade":   MAX_RISK_PER_TRADE,
+            "halted":           either_halted,
         },
+
         "positions":    positions_out,
-        "candidates":   candidates[:5],
-        "closed_today": closed_today[:15],
-        "market":       market,
-        "log":          log,
+        "candidates":   candidates[:10],
+        "closed_today": closed_today[:20],
+        "catalysts":    catalysts,
+        "log":          log_lines,
     }
 
 
-# ── Background broadcaster ───────────────────────────────────────────────────
+# ── Background broadcaster ────────────────────────────────────────────────────
 
 async def _broadcast_loop():
     while True:
@@ -279,7 +478,7 @@ async def _broadcast_loop():
                 snap = build_snapshot()
                 await manager.broadcast(snap)
         except Exception as e:
-            logger.debug(f"Broadcast: {e}")
+            logger.debug(f"Broadcast error: {e}")
         await asyncio.sleep(2)
 
 
@@ -288,14 +487,14 @@ async def _startup():
     asyncio.create_task(_broadcast_loop())
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.get("/", dependencies=_auth_deps)
 async def root():
     return FileResponse(str(Path(__file__).parent / "static" / "index.html"))
 
 
-@app.get("/api/snapshot")
+@app.get("/api/snapshot", dependencies=_auth_deps)
 async def snapshot():
     return build_snapshot()
 
@@ -309,15 +508,5 @@ async def ws_endpoint(ws: WebSocket):
             await ws.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(ws)
-
-
-if __name__ == "__main__":
-    import uvicorn
-    print("=" * 60)
-    print("  SMALL CAP DASHBOARD")
-    print("=" * 60)
-    print("  Open: http://localhost:8889")
-    print("  Updates every 2 seconds via WebSocket")
-    print("  Reads: config/smallcap_portfolio.json + Schwab quotes")
-    print("=" * 60)
-    uvicorn.run(app, host="127.0.0.1", port=8889, log_level="warning")
+    except Exception:
+        manager.disconnect(ws)
